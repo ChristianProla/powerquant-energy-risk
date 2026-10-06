@@ -6,33 +6,53 @@ class ElectricityAPI:
     def __init__(self):
         self.base_url = "https://api.energidataservice.dk/dataset/DayAheadPrices"
 
-    def get_prices(self, price_area="DK1", limit=20):
+    def get_prices(
+        self,
+        price_area="DK1",
+        start_date=None,
+        end_date=None
+    ):
         params = {
             "filter": '{"PriceArea":["' + price_area + '"]}',
-            "columns": "TimeDK,PriceArea,DayAheadPriceEUR",
-            "limit": limit
+            "columns": "TimeDK,PriceArea,DayAheadPriceEUR"
         }
 
-        response = requests.get(self.base_url, params=params)
+        if start_date is not None:
+            params["start"] = start_date
+
+        if end_date is not None:
+            params["end"] = end_date
+
+        response = requests.get(
+            self.base_url,
+            params=params
+        )
+
         response.raise_for_status()
 
         data = response.json()
+
         records = data["records"]
 
         dataframe = pd.DataFrame(records)
 
-        # Convert TimeDK into a real datetime value
-        dataframe["TimeDK"] = pd.to_datetime(dataframe["TimeDK"])
+        if dataframe.empty:
+            return dataframe
 
-        # Make sure electricity prices are numeric
+        dataframe["TimeDK"] = pd.to_datetime(
+            dataframe["TimeDK"]
+        )
+
         dataframe["DayAheadPriceEUR"] = pd.to_numeric(
             dataframe["DayAheadPriceEUR"]
         )
 
-        # Sort data from oldest to newest
-        dataframe = dataframe.sort_values(by="TimeDK")
+        dataframe = dataframe.sort_values(
+            by="TimeDK"
+        )
 
-        # Reset row numbers after sorting
-        dataframe = dataframe.reset_index(drop=True)
+        dataframe = dataframe.reset_index(
+            drop=True
+        )
 
         return dataframe
