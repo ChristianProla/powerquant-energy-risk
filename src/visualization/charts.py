@@ -1,21 +1,30 @@
-import matplotlib.pyplot as plt
+from matplotlib.figure import Figure
 
 
 class ChartBuilder:
-    def plot_price_chart(self, dataframe):
-        plt.figure(figsize=(12, 6))
 
-        plt.plot(
+    def create_price_chart(self, dataframe, price_area, time_range):
+
+        figure = Figure(figsize=(10, 5), dpi=100)
+
+        axis = figure.add_subplot(111)
+
+        axis.plot(
             dataframe["TimeDK"],
             dataframe["DayAheadPriceEUR"]
         )
 
-        plt.title("DK1 Day-Ahead Electricity Prices")
-        plt.xlabel("Time")
-        plt.ylabel("Price (EUR/MWh)")
+        axis.set_title(
+            f"{price_area} Day-Ahead Electricity Prices - {time_range}"
+        )
 
-        plt.xticks(rotation=45)
+        axis.set_xlabel("Time")
+        axis.set_ylabel("Price (EUR/MWh)")
 
-        plt.tight_layout()
+        axis.grid(True, alpha=0.3)
 
-        plt.show()
+        figure.autofmt_xdate()
+
+        figure.tight_layout()
+
+        return figure

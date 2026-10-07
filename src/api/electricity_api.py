@@ -9,29 +9,26 @@ class ElectricityAPI:
     def get_prices(
         self,
         price_area="DK1",
-        start_date=None,
-        end_date=None
+        start_date="now-P1D",
+        end_date="now"
     ):
         params = {
             "filter": '{"PriceArea":["' + price_area + '"]}',
-            "columns": "TimeDK,PriceArea,DayAheadPriceEUR"
+            "columns": "TimeDK,PriceArea,DayAheadPriceEUR",
+            "start": start_date,
+            "end": end_date,
+            "limit": 0
         }
-
-        if start_date is not None:
-            params["start"] = start_date
-
-        if end_date is not None:
-            params["end"] = end_date
 
         response = requests.get(
             self.base_url,
-            params=params
+            params=params,
+            timeout=15
         )
 
         response.raise_for_status()
 
         data = response.json()
-
         records = data["records"]
 
         dataframe = pd.DataFrame(records)
