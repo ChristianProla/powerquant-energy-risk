@@ -7,6 +7,7 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from src.api.electricity_api import ElectricityAPI
 from src.analytics.resampling import MarketDataResampler
+from src.analytics.returns import ReturnCalculator
 from src.visualization.charts import ChartBuilder
 
 
@@ -22,6 +23,7 @@ class PowerQuantApp(tk.Tk):
         self.api = ElectricityAPI()
         self.chart_builder = ChartBuilder()
         self.resampler = MarketDataResampler()
+        self.return_calculator = ReturnCalculator()
 
         self.selected_range = "1D"
 
@@ -36,12 +38,21 @@ class PowerQuantApp(tk.Tk):
         self.show_home_page()
 
     # --------------------------------------------------
-    # Clear current page
+    # Clear window
     # --------------------------------------------------
 
     def clear_window(self):
 
         for widget in self.winfo_children():
+            widget.destroy()
+
+    # --------------------------------------------------
+    # Clear frame
+    # --------------------------------------------------
+
+    def clear_frame(self, frame):
+
+        for widget in frame.winfo_children():
             widget.destroy()
 
     # --------------------------------------------------
@@ -85,9 +96,7 @@ class PowerQuantApp(tk.Tk):
             pady=25
         )
 
-        # -------------------------
         # Market selection
-        # -------------------------
 
         market_title = tk.Label(
             content,
@@ -111,9 +120,7 @@ class PowerQuantApp(tk.Tk):
             pady=(8, 25)
         )
 
-        # -------------------------
         # Time range
-        # -------------------------
 
         range_title = tk.Label(
             content,
@@ -163,10 +170,6 @@ class PowerQuantApp(tk.Tk):
             anchor="w",
             pady=(0, 20)
         )
-
-        # -------------------------
-        # Open analysis
-        # -------------------------
 
         load_button = tk.Button(
             content,
@@ -249,14 +252,23 @@ class PowerQuantApp(tk.Tk):
 
                 return
 
-            chart_data, resolution = self.resampler.resample_for_range(
-                prices,
-                self.selected_range
+            chart_data, resolution = (
+                self.resampler.resample_for_range(
+                    prices,
+                    self.selected_range
+                )
+            )
+
+            returns_data = (
+                self.return_calculator.calculate_returns(
+                    chart_data
+                )
             )
 
             self.show_market_page(
                 prices,
                 chart_data,
+                returns_data,
                 price_area,
                 readable_range,
                 resolution
@@ -316,6 +328,7 @@ class PowerQuantApp(tk.Tk):
         self,
         prices,
         chart_data,
+        returns_data,
         price_area,
         time_range,
         resolution
@@ -323,9 +336,7 @@ class PowerQuantApp(tk.Tk):
 
         self.clear_window()
 
-        # -------------------------
         # Navigation
-        # -------------------------
 
         navigation = tk.Frame(self)
 
@@ -354,9 +365,7 @@ class PowerQuantApp(tk.Tk):
             padx=20
         )
 
-        # -------------------------
         # Main content
-        # -------------------------
 
         content = tk.Frame(self)
 
@@ -367,15 +376,13 @@ class PowerQuantApp(tk.Tk):
             pady=20
         )
 
-        # -------------------------
-        # Market information
-        # -------------------------
+        # Basic market information
 
         info_frame = tk.Frame(content)
 
         info_frame.pack(
             fill="x",
-            pady=(0, 15)
+            pady=(0, 10)
         )
 
         latest_price = prices[
@@ -383,14 +390,6 @@ class PowerQuantApp(tk.Tk):
         ].iloc[-1]
 
         number_of_points = len(prices)
-
-        first_date = prices[
-            "TimeDK"
-        ].min()
-
-        last_date = prices[
-            "TimeDK"
-        ].max()
 
         market_label = tk.Label(
             info_frame,
@@ -446,9 +445,82 @@ class PowerQuantApp(tk.Tk):
 
         resolution_label.pack(side="left")
 
-        # -------------------------
-        # Graph
-        # -------------------------
+        # -----------------------------------------
+        # Analysis navigation
+        # -----------------------------------------
+
+        analysis_navigation = tk.Frame(content)
+
+        analysis_navigation.pack(
+            fill="x",
+            pady=(5, 10)
+        )
+
+        analysis_content = tk.Frame(content)
+
+        analysis_content.pack(
+            fill="both",
+            expand=True
+        )
+
+        price_button = tk.Button(
+            analysis_navigation,
+            text="Price Chart",
+            command=lambda:
+            self.show_price_view(
+                analysis_content,
+                chart_data,
+                price_area,
+                time_range,
+                resolution
+            )
+        )
+
+        price_button.pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        returns_button = tk.Button(
+            analysis_navigation,
+            text="Returns",
+            command=lambda:
+            self.show_returns_view(
+                analysis_content,
+                returns_data,
+                price_area,
+                time_range
+            )
+        )
+
+        returns_button.pack(
+            side="left"
+        )
+
+        # Show price view by default
+
+        self.show_price_view(
+            analysis_content,
+            chart_data,
+            price_area,
+            time_range,
+            resolution
+        )
+
+    # --------------------------------------------------
+    # Price view
+    # --------------------------------------------------
+
+    def show_price_view(
+        self,
+        container,
+        chart_data,
+        price_area,
+        time_range,
+        resolution
+    ):
+
+        self.clear_frame(container)
 
         figure = self.chart_builder.create_price_chart(
             chart_data,
@@ -459,7 +531,7 @@ class PowerQuantApp(tk.Tk):
 
         canvas = FigureCanvasTkAgg(
             figure,
-            master=content
+            master=container
         )
 
         canvas.draw()
@@ -469,20 +541,99 @@ class PowerQuantApp(tk.Tk):
             expand=True
         )
 
-        # -------------------------
-        # Date information
-        # -------------------------
+    # --------------------------------------------------
+    # Returns view
+    # --------------------------------------------------
 
-        date_label = tk.Label(
-            content,
-            text=(
-                f"Data from {first_date} "
-                f"to {last_date}"
-            ),
-            font=("Arial", 10)
+    def show_returns_view(
+        self,
+        container,
+        returns_data,
+        price_area,
+        time_range
+    ):
+
+        self.clear_frame(container)
+
+        if returns_data.empty:
+
+            message = tk.Label(
+                container,
+                text="Not enough data to calculate returns.",
+                font=("Arial", 12)
+            )
+
+            message.pack(pady=30)
+
+            return
+
+        statistics = (
+            self.return_calculator.get_return_statistics(
+                returns_data
+            )
         )
 
-        date_label.pack(
-            anchor="w",
-            pady=(10, 0)
+        # Return statistics
+
+        stats_frame = tk.Frame(container)
+
+        stats_frame.pack(
+            fill="x",
+            pady=(5, 10)
+        )
+
+        mean_label = tk.Label(
+            stats_frame,
+            text=(
+                f"Mean Return\n"
+                f"{statistics['mean']:.2f}%"
+            ),
+            font=("Arial", 11, "bold"),
+            padx=25
+        )
+
+        mean_label.pack(side="left")
+
+        minimum_label = tk.Label(
+            stats_frame,
+            text=(
+                f"Minimum Return\n"
+                f"{statistics['minimum']:.2f}%"
+            ),
+            font=("Arial", 11, "bold"),
+            padx=25
+        )
+
+        minimum_label.pack(side="left")
+
+        maximum_label = tk.Label(
+            stats_frame,
+            text=(
+                f"Maximum Return\n"
+                f"{statistics['maximum']:.2f}%"
+            ),
+            font=("Arial", 11, "bold"),
+            padx=25
+        )
+
+        maximum_label.pack(side="left")
+
+        # Returns chart
+
+        figure = self.chart_builder.create_returns_chart(
+            returns_data,
+            price_area,
+            time_range
+        )
+
+        canvas = FigureCanvasTkAgg(
+            figure,
+            master=container
+        )
+
+        canvas.draw()
+
+        canvas.get_tk_widget().pack(
+            fill="both",
+            expand=True
         )

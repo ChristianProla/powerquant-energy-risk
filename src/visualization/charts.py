@@ -4,40 +4,12 @@ import matplotlib.dates as mdates
 
 class ChartBuilder:
 
-    def create_price_chart(
+    def _format_x_axis(
         self,
-        dataframe,
-        price_area,
-        time_range,
-        resolution
+        axis,
+        figure,
+        time_range
     ):
-
-        figure = Figure(
-            figsize=(10, 5),
-            dpi=100
-        )
-
-        axis = figure.add_subplot(111)
-
-        axis.plot(
-            dataframe["TimeDK"],
-            dataframe["DayAheadPriceEUR"]
-        )
-
-        axis.set_title(
-            f"{price_area} Day-Ahead Electricity Prices - {time_range}"
-        )
-
-        axis.set_ylabel("Price (EUR/MWh)")
-
-        axis.grid(
-            True,
-            alpha=0.3
-        )
-
-        # -----------------------------------------
-        # X-axis formatting based on selected range
-        # -----------------------------------------
 
         if time_range == "1 Hour":
 
@@ -103,15 +75,8 @@ class ChartBuilder:
                 locator
             )
 
-            axis.set_xlabel("Time")
-
-        axis.xaxis.set_major_locator(
-            locator
-        )
-
-        axis.xaxis.set_major_formatter(
-            formatter
-        )
+        axis.xaxis.set_major_locator(locator)
+        axis.xaxis.set_major_formatter(formatter)
 
         if time_range in [
             "1 Week",
@@ -122,6 +87,94 @@ class ChartBuilder:
             figure.autofmt_xdate(
                 rotation=45
             )
+
+    def create_price_chart(
+        self,
+        dataframe,
+        price_area,
+        time_range,
+        resolution
+    ):
+
+        figure = Figure(
+            figsize=(10, 5),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(111)
+
+        axis.plot(
+            dataframe["TimeDK"],
+            dataframe["DayAheadPriceEUR"]
+        )
+
+        axis.set_title(
+            f"{price_area} Day-Ahead Electricity Prices - {time_range}"
+        )
+
+        axis.set_ylabel(
+            "Price (EUR/MWh)"
+        )
+
+        axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        self._format_x_axis(
+            axis,
+            figure,
+            time_range
+        )
+
+        figure.tight_layout()
+
+        return figure
+
+    def create_returns_chart(
+        self,
+        dataframe,
+        price_area,
+        time_range
+    ):
+
+        figure = Figure(
+            figsize=(10, 5),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(111)
+
+        axis.plot(
+            dataframe["TimeDK"],
+            dataframe["PercentageReturn"]
+        )
+
+        # Zero line
+        axis.axhline(
+            y=0,
+            linewidth=1,
+            alpha=0.6
+        )
+
+        axis.set_title(
+            f"{price_area} Electricity Price Returns - {time_range}"
+        )
+
+        axis.set_ylabel(
+            "Return (%)"
+        )
+
+        axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        self._format_x_axis(
+            axis,
+            figure,
+            time_range
+        )
 
         figure.tight_layout()
 
