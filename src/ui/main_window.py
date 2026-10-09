@@ -1,10 +1,12 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
+
 import requests
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from src.api.electricity_api import ElectricityAPI
+from src.analytics.resampling import MarketDataResampler
 from src.visualization.charts import ChartBuilder
 
 
@@ -19,6 +21,7 @@ class PowerQuantApp(tk.Tk):
 
         self.api = ElectricityAPI()
         self.chart_builder = ChartBuilder()
+        self.resampler = MarketDataResampler()
 
         self.selected_range = "1D"
 
@@ -27,9 +30,7 @@ class PowerQuantApp(tk.Tk):
             "1D": ("now-P1D", "1 Day"),
             "1W": ("now-P7D", "1 Week"),
             "1M": ("now-P1M", "1 Month"),
-            "1Y": ("now-P1Y", "1 Year"),
-            "5Y": ("now-P5Y", "5 Years"),
-            "10Y": ("now-P10Y", "10 Years")
+            "1Y": ("now-P1Y", "1 Year")
         }
 
         self.show_home_page()
@@ -50,8 +51,6 @@ class PowerQuantApp(tk.Tk):
     def show_home_page(self):
 
         self.clear_window()
-
-        # Header
 
         header = tk.Frame(self)
 
@@ -77,8 +76,6 @@ class PowerQuantApp(tk.Tk):
 
         subtitle.pack(anchor="w")
 
-        # Main content
-
         content = tk.Frame(self)
 
         content.pack(
@@ -88,7 +85,9 @@ class PowerQuantApp(tk.Tk):
             pady=25
         )
 
-        # Market
+        # -------------------------
+        # Market selection
+        # -------------------------
 
         market_title = tk.Label(
             content,
@@ -112,7 +111,9 @@ class PowerQuantApp(tk.Tk):
             pady=(8, 25)
         )
 
+        # -------------------------
         # Time range
+        # -------------------------
 
         range_title = tk.Label(
             content,
@@ -134,9 +135,7 @@ class PowerQuantApp(tk.Tk):
             "1D",
             "1W",
             "1M",
-            "1Y",
-            "5Y",
-            "10Y"
+            "1Y"
         ]
 
         for time_range in ranges:
@@ -154,8 +153,6 @@ class PowerQuantApp(tk.Tk):
                 padx=(0, 8)
             )
 
-        # Selected range
-
         self.range_label = tk.Label(
             content,
             text="Selected: 1 Day",
@@ -167,7 +164,9 @@ class PowerQuantApp(tk.Tk):
             pady=(0, 20)
         )
 
-        # Load button
+        # -------------------------
+        # Open analysis
+        # -------------------------
 
         load_button = tk.Button(
             content,
@@ -179,8 +178,6 @@ class PowerQuantApp(tk.Tk):
         )
 
         load_button.pack(anchor="w")
-
-        # Status
 
         self.status_label = tk.Label(
             content,
@@ -240,6 +237,7 @@ class PowerQuantApp(tk.Tk):
             )
 
             if prices.empty:
+
                 messagebox.showwarning(
                     "No Data",
                     "No market data was returned."
@@ -251,10 +249,17 @@ class PowerQuantApp(tk.Tk):
 
                 return
 
+            chart_data, resolution = self.resampler.resample_for_range(
+                prices,
+                self.selected_range
+            )
+
             self.show_market_page(
                 prices,
+                chart_data,
                 price_area,
-                readable_range
+                readable_range,
+                resolution
             )
 
         except requests.exceptions.ConnectionError:
@@ -310,13 +315,17 @@ class PowerQuantApp(tk.Tk):
     def show_market_page(
         self,
         prices,
+        chart_data,
         price_area,
-        time_range
+        time_range,
+        resolution
     ):
 
         self.clear_window()
 
-        # Top navigation
+        # -------------------------
+        # Navigation
+        # -------------------------
 
         navigation = tk.Frame(self)
 
@@ -345,7 +354,9 @@ class PowerQuantApp(tk.Tk):
             padx=20
         )
 
-        # Main area
+        # -------------------------
+        # Main content
+        # -------------------------
 
         content = tk.Frame(self)
 
@@ -356,7 +367,9 @@ class PowerQuantApp(tk.Tk):
             pady=20
         )
 
-        # Statistics
+        # -------------------------
+        # Market information
+        # -------------------------
 
         info_frame = tk.Frame(content)
 
@@ -421,12 +434,27 @@ class PowerQuantApp(tk.Tk):
 
         points_label.pack(side="left")
 
+        resolution_label = tk.Label(
+            info_frame,
+            text=(
+                f"Chart Resolution\n"
+                f"{resolution}"
+            ),
+            font=("Arial", 12, "bold"),
+            padx=25
+        )
+
+        resolution_label.pack(side="left")
+
+        # -------------------------
         # Graph
+        # -------------------------
 
         figure = self.chart_builder.create_price_chart(
-            prices,
+            chart_data,
             price_area,
-            time_range
+            time_range,
+            resolution
         )
 
         canvas = FigureCanvasTkAgg(
@@ -441,7 +469,9 @@ class PowerQuantApp(tk.Tk):
             expand=True
         )
 
+        # -------------------------
         # Date information
+        # -------------------------
 
         date_label = tk.Label(
             content,
