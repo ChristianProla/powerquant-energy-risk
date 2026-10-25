@@ -17,6 +17,7 @@ from src.risk.value_at_risk import ValueAtRiskAnalyzer
 from src.risk.expected_shortfall import ExpectedShortfallAnalyzer
 from src.risk.monte_carlo import MonteCarloSimulator
 from src.risk.stress_testing import StressTester
+from src.forecasting.forecasting import PriceForecaster
 from src.visualization.charts import ChartBuilder
 
 
@@ -54,6 +55,8 @@ class PowerQuantApp(tk.Tk):
         self.monte_carlo_simulator = MonteCarloSimulator()
 
         self.stress_tester = StressTester()
+
+        self.price_forecaster = PriceForecaster()
 
         self.selected_range = "1D"
 
@@ -530,10 +533,6 @@ class PowerQuantApp(tk.Tk):
             pady=20
         )
 
-        # -----------------------------------------
-        # Market information
-        # -----------------------------------------
-
         info_frame = tk.Frame(
             content
         )
@@ -590,10 +589,6 @@ class PowerQuantApp(tk.Tk):
             ).pack(
                 side="left"
             )
-
-        # -----------------------------------------
-        # Analysis navigation
-        # -----------------------------------------
 
         analysis_navigation = (
             tk.Frame(
@@ -703,6 +698,16 @@ class PowerQuantApp(tk.Tk):
                 self.show_stress_test_view(
                     analysis_content,
                     returns_data,
+                    price_area,
+                    time_range
+                )
+            ),
+            (
+                "Forecast",
+                lambda:
+                self.show_forecast_view(
+                    analysis_content,
+                    chart_data,
                     price_area,
                     time_range
                 )
@@ -1512,22 +1517,6 @@ class PowerQuantApp(tk.Tk):
             pady=(5, 5)
         )
 
-        tk.Label(
-            container,
-            text=(
-                "Simulate possible future return paths "
-                "using historical mean return "
-                "and volatility."
-            ),
-            font=(
-                "Arial",
-                10
-            )
-        ).pack(
-            anchor="w",
-            pady=(0, 10)
-        )
-
         controls = tk.Frame(
             container
         )
@@ -1638,33 +1627,23 @@ class PowerQuantApp(tk.Tk):
             stats = [
                 (
                     "Expected Ending Return",
-                    (
-                        f"{results['expected_return']:.2f}%"
-                    )
+                    f"{results['expected_return']:.2f}%"
                 ),
                 (
                     "Median Ending Return",
-                    (
-                        f"{results['median_return']:.2f}%"
-                    )
+                    f"{results['median_return']:.2f}%"
                 ),
                 (
                     "5th Percentile",
-                    (
-                        f"{results['percentile_5']:.2f}%"
-                    )
+                    f"{results['percentile_5']:.2f}%"
                 ),
                 (
                     "95th Percentile",
-                    (
-                        f"{results['percentile_95']:.2f}%"
-                    )
+                    f"{results['percentile_95']:.2f}%"
                 ),
                 (
                     "Probability of Loss",
-                    (
-                        f"{results['probability_of_loss']:.2f}%"
-                    )
+                    f"{results['probability_of_loss']:.2f}%"
                 )
             ]
 
@@ -1715,7 +1694,7 @@ class PowerQuantApp(tk.Tk):
         run_simulation()
 
     # --------------------------------------------------
-    # Stress Testing
+    # Stress Test
     # --------------------------------------------------
 
     def show_stress_test_view(
@@ -1741,21 +1720,6 @@ class PowerQuantApp(tk.Tk):
         ).pack(
             anchor="w",
             pady=(5, 5)
-        )
-
-        tk.Label(
-            container,
-            text=(
-                "Test how the market could behave "
-                "under predefined extreme scenarios."
-            ),
-            font=(
-                "Arial",
-                10
-            )
-        ).pack(
-            anchor="w",
-            pady=(0, 10)
         )
 
         controls = tk.Frame(
@@ -1784,15 +1748,13 @@ class PowerQuantApp(tk.Tk):
             )
         )
 
-        scenario_box = ttk.Combobox(
+        ttk.Combobox(
             controls,
             textvariable=scenario_variable,
             values=scenarios,
             state="readonly",
             width=22
-        )
-
-        scenario_box.pack(
+        ).pack(
             side="left",
             padx=(5, 15)
         )
@@ -1812,14 +1774,10 @@ class PowerQuantApp(tk.Tk):
                 output_frame
             )
 
-            scenario_name = (
-                scenario_variable.get()
-            )
-
             results = (
                 self.stress_tester.run_stress_test(
                     returns_data,
-                    scenario_name
+                    scenario_variable.get()
                 )
             )
 
@@ -1835,39 +1793,27 @@ class PowerQuantApp(tk.Tk):
             stats = [
                 (
                     "Market Shock",
-                    (
-                        f"{results['market_shock']:.1f}%"
-                    )
+                    f"{results['market_shock']:.1f}%"
                 ),
                 (
                     "Baseline Return",
-                    (
-                        f"{results['baseline_mean']:.2f}%"
-                    )
+                    f"{results['baseline_mean']:.2f}%"
                 ),
                 (
                     "Stressed Return",
-                    (
-                        f"{results['stressed_return']:.2f}%"
-                    )
+                    f"{results['stressed_return']:.2f}%"
                 ),
                 (
                     "Baseline Volatility",
-                    (
-                        f"{results['baseline_volatility']:.2f}%"
-                    )
+                    f"{results['baseline_volatility']:.2f}%"
                 ),
                 (
                     "Stressed Volatility",
-                    (
-                        f"{results['stressed_volatility']:.2f}%"
-                    )
+                    f"{results['stressed_volatility']:.2f}%"
                 ),
                 (
                     "Estimated Loss",
-                    (
-                        f"{results['estimated_loss']:.2f}%"
-                    )
+                    f"{results['estimated_loss']:.2f}%"
                 )
             ]
 
@@ -1916,3 +1862,235 @@ class PowerQuantApp(tk.Tk):
         )
 
         run_stress_test()
+
+    # --------------------------------------------------
+    # Forecast
+    # --------------------------------------------------
+
+    def show_forecast_view(
+        self,
+        container,
+        price_data,
+        price_area,
+        time_range
+    ):
+
+        self.clear_frame(
+            container
+        )
+
+        tk.Label(
+            container,
+            text="Electricity Price Forecast",
+            font=(
+                "Arial",
+                15,
+                "bold"
+            )
+        ).pack(
+            anchor="w",
+            pady=(5, 5)
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Create a simple short-term price forecast "
+                "using either a moving average or linear trend."
+            ),
+            font=(
+                "Arial",
+                10
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 10)
+        )
+
+        controls = tk.Frame(
+            container
+        )
+
+        controls.pack(
+            fill="x",
+            pady=(0, 10)
+        )
+
+        tk.Label(
+            controls,
+            text="Forecast Method:"
+        ).pack(
+            side="left"
+        )
+
+        method_variable = (
+            tk.StringVar(
+                value="Moving Average"
+            )
+        )
+
+        ttk.Combobox(
+            controls,
+            textvariable=method_variable,
+            values=[
+                "Moving Average",
+                "Linear Trend"
+            ],
+            state="readonly",
+            width=18
+        ).pack(
+            side="left",
+            padx=(5, 20)
+        )
+
+        tk.Label(
+            controls,
+            text="Forecast Horizon:"
+        ).pack(
+            side="left"
+        )
+
+        horizon_variable = (
+            tk.StringVar(
+                value="10"
+            )
+        )
+
+        ttk.Combobox(
+            controls,
+            textvariable=horizon_variable,
+            values=[
+                "5",
+                "10",
+                "20",
+                "30"
+            ],
+            state="readonly",
+            width=8
+        ).pack(
+            side="left",
+            padx=(5, 20)
+        )
+
+        output_frame = tk.Frame(
+            container
+        )
+
+        output_frame.pack(
+            fill="both",
+            expand=True
+        )
+
+        def run_forecast():
+
+            self.clear_frame(
+                output_frame
+            )
+
+            method = (
+                method_variable.get()
+            )
+
+            horizon = int(
+                horizon_variable.get()
+            )
+
+            results = (
+                self.price_forecaster.forecast(
+                    price_data,
+                    method=method,
+                    horizon=horizon
+                )
+            )
+
+            stats_frame = tk.Frame(
+                output_frame
+            )
+
+            stats_frame.pack(
+                fill="x",
+                pady=(0, 10)
+            )
+
+            stats = [
+                (
+                    "Method",
+                    results[
+                        "method"
+                    ]
+                ),
+                (
+                    "Current Price",
+                    (
+                        f"{results['current_price']:.2f} "
+                        f"EUR/MWh"
+                    )
+                ),
+                (
+                    "Forecast Price",
+                    (
+                        f"{results['forecast_price']:.2f} "
+                        f"EUR/MWh"
+                    )
+                ),
+                (
+                    "Price Change",
+                    (
+                        f"{results['price_change']:.2f} "
+                        f"EUR/MWh"
+                    )
+                ),
+                (
+                    "Price Change %",
+                    (
+                        f"{results['price_change_percent']:.2f}%"
+                    )
+                )
+            ]
+
+            for name, value in stats:
+
+                tk.Label(
+                    stats_frame,
+                    text=(
+                        f"{name}\n"
+                        f"{value}"
+                    ),
+                    font=(
+                        "Arial",
+                        10,
+                        "bold"
+                    ),
+                    padx=15
+                ).pack(
+                    side="left"
+                )
+
+            figure = (
+                self.chart_builder.create_forecast_chart(
+                    price_data,
+                    results,
+                    price_area,
+                    time_range
+                )
+            )
+
+            self.embed_chart(
+                output_frame,
+                figure
+            )
+
+        tk.Button(
+            controls,
+            text="Run Forecast",
+            font=(
+                "Arial",
+                10,
+                "bold"
+            ),
+            command=run_forecast
+        ).pack(
+            side="left"
+        )
+
+        run_forecast()

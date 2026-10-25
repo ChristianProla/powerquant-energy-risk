@@ -73,10 +73,8 @@ class ChartBuilder:
 
             locator = mdates.AutoDateLocator()
 
-            formatter = (
-                mdates.ConciseDateFormatter(
-                    locator
-                )
+            formatter = mdates.ConciseDateFormatter(
+                locator
             )
 
             axis.set_xlabel("Time")
@@ -808,6 +806,120 @@ class ChartBuilder:
             axis="y",
             alpha=0.3
         )
+
+        figure.tight_layout()
+
+        return figure
+
+    # --------------------------------------------------
+    # Forecast
+    # --------------------------------------------------
+
+    def create_forecast_chart(
+        self,
+        price_dataframe,
+        forecast_results,
+        price_area,
+        time_range
+    ):
+
+        figure = Figure(
+            figsize=(10, 5),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(111)
+
+        if (
+            price_dataframe.empty
+            or
+            forecast_results[
+                "forecast_prices"
+            ].size == 0
+        ):
+
+            axis.text(
+                0.5,
+                0.5,
+                "Not enough data to create forecast.",
+                horizontalalignment="center",
+                verticalalignment="center",
+                transform=axis.transAxes
+            )
+
+            return figure
+
+        historical_prices = price_dataframe[
+            "DayAheadPriceEUR"
+        ].to_numpy()
+
+        number_of_historical_points = min(
+            50,
+            len(historical_prices)
+        )
+
+        recent_prices = historical_prices[
+            -number_of_historical_points:
+        ]
+
+        historical_x = np.arange(
+            number_of_historical_points
+        )
+
+        forecast_prices = forecast_results[
+            "forecast_prices"
+        ]
+
+        forecast_x = np.arange(
+            number_of_historical_points,
+            number_of_historical_points
+            + len(forecast_prices)
+        )
+
+        axis.plot(
+            historical_x,
+            recent_prices,
+            label="Historical Price"
+        )
+
+        axis.plot(
+            forecast_x,
+            forecast_prices,
+            linestyle="--",
+            linewidth=2,
+            label=(
+                f"{forecast_results['method']} Forecast"
+            )
+        )
+
+        axis.axvline(
+            x=number_of_historical_points - 1,
+            linestyle=":",
+            linewidth=1.5,
+            label="Forecast Start"
+        )
+
+        axis.set_title(
+            (
+                f"{price_area} Electricity Price Forecast - "
+                f"{time_range}"
+            )
+        )
+
+        axis.set_xlabel(
+            "Observation / Forecast Period"
+        )
+
+        axis.set_ylabel(
+            "Price (EUR/MWh)"
+        )
+
+        axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        axis.legend()
 
         figure.tight_layout()
 
