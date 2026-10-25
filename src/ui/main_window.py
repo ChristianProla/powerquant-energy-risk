@@ -3,21 +3,32 @@ from tkinter import ttk, messagebox
 
 import requests
 
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.backends.backend_tkagg import (
+    FigureCanvasTkAgg
+)
 
 from src.api.electricity_api import ElectricityAPI
+from src.api.market_factors_api import MarketFactorsAPI
+
 from src.analytics.resampling import MarketDataResampler
 from src.analytics.returns import ReturnCalculator
 from src.analytics.statistics import StatisticsAnalyzer
 from src.analytics.volatility import VolatilityAnalyzer
 from src.analytics.correlation import CorrelationAnalyzer
+
 from src.portfolio.portfolio import PortfolioAnalyzer
 from src.portfolio.optimization import PortfolioOptimizer
+
 from src.risk.value_at_risk import ValueAtRiskAnalyzer
 from src.risk.expected_shortfall import ExpectedShortfallAnalyzer
 from src.risk.monte_carlo import MonteCarloSimulator
 from src.risk.stress_testing import StressTester
+
 from src.forecasting.forecasting import PriceForecaster
+from src.forecasting.feature_engineering import FeatureEngineer
+
+from src.ui.market_factors_view import MarketFactorsView
+
 from src.visualization.charts import ChartBuilder
 
 
@@ -26,39 +37,98 @@ class PowerQuantApp(tk.Tk):
     def __init__(self):
         super().__init__()
 
-        self.title("PowerQuant")
-        self.geometry("1200x750")
-        self.minsize(1000, 650)
+        self.title(
+            "PowerQuant"
+        )
+
+        self.geometry(
+            "1200x750"
+        )
+
+        self.minsize(
+            1000,
+            650
+        )
+
+        # --------------------------------------------------
+        # Core services
+        # --------------------------------------------------
 
         self.api = ElectricityAPI()
 
-        self.chart_builder = ChartBuilder()
+        self.market_factors_api = (
+            MarketFactorsAPI()
+        )
 
-        self.resampler = MarketDataResampler()
+        self.chart_builder = (
+            ChartBuilder()
+        )
 
-        self.return_calculator = ReturnCalculator()
+        self.resampler = (
+            MarketDataResampler()
+        )
 
-        self.statistics_analyzer = StatisticsAnalyzer()
+        self.return_calculator = (
+            ReturnCalculator()
+        )
 
-        self.volatility_analyzer = VolatilityAnalyzer()
+        self.statistics_analyzer = (
+            StatisticsAnalyzer()
+        )
 
-        self.correlation_analyzer = CorrelationAnalyzer()
+        self.volatility_analyzer = (
+            VolatilityAnalyzer()
+        )
 
-        self.portfolio_analyzer = PortfolioAnalyzer()
+        self.correlation_analyzer = (
+            CorrelationAnalyzer()
+        )
 
-        self.portfolio_optimizer = PortfolioOptimizer()
+        self.portfolio_analyzer = (
+            PortfolioAnalyzer()
+        )
 
-        self.var_analyzer = ValueAtRiskAnalyzer()
+        self.portfolio_optimizer = (
+            PortfolioOptimizer()
+        )
 
-        self.es_analyzer = ExpectedShortfallAnalyzer()
+        self.var_analyzer = (
+            ValueAtRiskAnalyzer()
+        )
 
-        self.monte_carlo_simulator = MonteCarloSimulator()
+        self.es_analyzer = (
+            ExpectedShortfallAnalyzer()
+        )
 
-        self.stress_tester = StressTester()
+        self.monte_carlo_simulator = (
+            MonteCarloSimulator()
+        )
 
-        self.price_forecaster = PriceForecaster()
+        self.stress_tester = (
+            StressTester()
+        )
 
-        self.selected_range = "1D"
+        self.price_forecaster = (
+            PriceForecaster()
+        )
+
+        self.feature_engineer = (
+            FeatureEngineer()
+        )
+
+        self.market_factors_view = (
+            MarketFactorsView(
+                self.feature_engineer
+            )
+        )
+
+        # --------------------------------------------------
+        # Time ranges
+        # --------------------------------------------------
+
+        self.selected_range = (
+            "1D"
+        )
 
         self.time_ranges = {
             "1H": (
@@ -85,13 +155,15 @@ class PowerQuantApp(tk.Tk):
 
         self.show_home_page()
 
-    # --------------------------------------------------
+    # ==================================================
     # Helpers
-    # --------------------------------------------------
+    # ==================================================
 
     def clear_window(self):
 
-        for widget in self.winfo_children():
+        for widget in (
+            self.winfo_children()
+        ):
 
             widget.destroy()
 
@@ -100,7 +172,9 @@ class PowerQuantApp(tk.Tk):
         frame
     ):
 
-        for widget in frame.winfo_children():
+        for widget in (
+            frame.winfo_children()
+        ):
 
             widget.destroy()
 
@@ -122,15 +196,17 @@ class PowerQuantApp(tk.Tk):
             expand=True
         )
 
-    # --------------------------------------------------
-    # Home
-    # --------------------------------------------------
+    # ==================================================
+    # Home page
+    # ==================================================
 
     def show_home_page(self):
 
         self.clear_window()
 
-        header = tk.Frame(self)
+        header = tk.Frame(
+            self
+        )
 
         header.pack(
             fill="x",
@@ -164,7 +240,9 @@ class PowerQuantApp(tk.Tk):
             anchor="w"
         )
 
-        content = tk.Frame(self)
+        content = tk.Frame(
+            self
+        )
 
         content.pack(
             fill="both",
@@ -172,6 +250,10 @@ class PowerQuantApp(tk.Tk):
             padx=40,
             pady=25
         )
+
+        # --------------------------------------------------
+        # Market selector
+        # --------------------------------------------------
 
         tk.Label(
             content,
@@ -185,14 +267,16 @@ class PowerQuantApp(tk.Tk):
             anchor="w"
         )
 
-        self.market_selector = ttk.Combobox(
-            content,
-            values=[
-                "DK1",
-                "DK2"
-            ],
-            state="readonly",
-            width=15
+        self.market_selector = (
+            ttk.Combobox(
+                content,
+                values=[
+                    "DK1",
+                    "DK2"
+                ],
+                state="readonly",
+                width=15
+            )
         )
 
         self.market_selector.set(
@@ -203,6 +287,10 @@ class PowerQuantApp(tk.Tk):
             anchor="w",
             pady=(8, 25)
         )
+
+        # --------------------------------------------------
+        # Time range
+        # --------------------------------------------------
 
         tk.Label(
             content,
@@ -246,12 +334,14 @@ class PowerQuantApp(tk.Tk):
                 padx=(0, 8)
             )
 
-        self.range_label = tk.Label(
-            content,
-            text="Selected: 1 Day",
-            font=(
-                "Arial",
-                11
+        self.range_label = (
+            tk.Label(
+                content,
+                text="Selected: 1 Day",
+                font=(
+                    "Arial",
+                    11
+                )
             )
         )
 
@@ -275,12 +365,14 @@ class PowerQuantApp(tk.Tk):
             anchor="w"
         )
 
-        self.status_label = tk.Label(
-            content,
-            text="Ready",
-            font=(
-                "Arial",
-                11
+        self.status_label = (
+            tk.Label(
+                content,
+                text="Ready",
+                font=(
+                    "Arial",
+                    11
+                )
             )
         )
 
@@ -289,9 +381,9 @@ class PowerQuantApp(tk.Tk):
             pady=(20, 0)
         )
 
-    # --------------------------------------------------
-    # Time range
-    # --------------------------------------------------
+    # ==================================================
+    # Time range selection
+    # ==================================================
 
     def select_range(
         self,
@@ -315,9 +407,9 @@ class PowerQuantApp(tk.Tk):
             )
         )
 
-    # --------------------------------------------------
+    # ==================================================
     # Load data
-    # --------------------------------------------------
+    # ==================================================
 
     def load_market_data(self):
 
@@ -345,6 +437,10 @@ class PowerQuantApp(tk.Tk):
 
         try:
 
+            # --------------------------------------------------
+            # Selected electricity market
+            # --------------------------------------------------
+
             prices = (
                 self.api.get_prices(
                     price_area=price_area,
@@ -363,34 +459,43 @@ class PowerQuantApp(tk.Tk):
                     )
                 )
 
+                self.status_label.config(
+                    text="No data available"
+                )
+
                 return
 
             chart_data, resolution = (
-                self.resampler.resample_for_range(
+                self.resampler
+                .resample_for_range(
                     prices,
                     self.selected_range
                 )
             )
 
             returns_data = (
-                self.return_calculator.calculate_returns(
+                self.return_calculator
+                .calculate_returns(
                     chart_data
                 )
             )
 
             volatility_data = (
-                self.volatility_analyzer.calculate_volatility(
+                self.volatility_analyzer
+                .calculate_volatility(
                     returns_data
                 )
             )
 
-            # -----------------------------------------
-            # DK1 + DK2
-            # -----------------------------------------
+            # --------------------------------------------------
+            # Load DK1 and DK2
+            # --------------------------------------------------
 
             if price_area == "DK1":
 
-                dk1_prices = prices
+                dk1_prices = (
+                    prices
+                )
 
                 dk2_prices = (
                     self.api.get_prices(
@@ -402,7 +507,9 @@ class PowerQuantApp(tk.Tk):
 
             else:
 
-                dk2_prices = prices
+                dk2_prices = (
+                    prices
+                )
 
                 dk1_prices = (
                     self.api.get_prices(
@@ -413,37 +520,67 @@ class PowerQuantApp(tk.Tk):
                 )
 
             dk1_chart_data, _ = (
-                self.resampler.resample_for_range(
+                self.resampler
+                .resample_for_range(
                     dk1_prices,
                     self.selected_range
                 )
             )
 
             dk2_chart_data, _ = (
-                self.resampler.resample_for_range(
+                self.resampler
+                .resample_for_range(
                     dk2_prices,
                     self.selected_range
                 )
             )
 
             dk1_returns = (
-                self.return_calculator.calculate_returns(
+                self.return_calculator
+                .calculate_returns(
                     dk1_chart_data
                 )
             )
 
             dk2_returns = (
-                self.return_calculator.calculate_returns(
+                self.return_calculator
+                .calculate_returns(
                     dk2_chart_data
                 )
             )
 
             correlation_data = (
-                self.correlation_analyzer.prepare_correlation_data(
+                self.correlation_analyzer
+                .prepare_correlation_data(
                     dk1_returns,
                     dk2_returns
                 )
             )
+
+            # --------------------------------------------------
+            # Market factors
+            # --------------------------------------------------
+
+            market_factors = (
+                self.market_factors_api
+                .get_market_factors(
+                    price_area=price_area,
+                    start_date=start_date,
+                    end_date="now"
+                )
+            )
+
+            feature_data = (
+                self.feature_engineer
+                .create_market_features(
+                    prices,
+                    market_factors
+                )
+            )
+
+            # --------------------------------------------------
+            # Open analysis
+            # --------------------------------------------------
 
             self.show_market_page(
                 prices,
@@ -451,12 +588,20 @@ class PowerQuantApp(tk.Tk):
                 returns_data,
                 volatility_data,
                 correlation_data,
+                feature_data,
                 price_area,
                 readable_range,
                 resolution
             )
 
-        except requests.exceptions.RequestException as error:
+        except (
+            requests.exceptions
+            .RequestException
+        ) as error:
+
+            self.status_label.config(
+                text="Connection error"
+            )
 
             messagebox.showerror(
                 "Connection Error",
@@ -465,14 +610,18 @@ class PowerQuantApp(tk.Tk):
 
         except Exception as error:
 
+            self.status_label.config(
+                text="PowerQuant error"
+            )
+
             messagebox.showerror(
                 "PowerQuant Error",
                 str(error)
             )
 
-    # --------------------------------------------------
-    # Market page
-    # --------------------------------------------------
+    # ==================================================
+    # Main analysis page
+    # ==================================================
 
     def show_market_page(
         self,
@@ -481,12 +630,17 @@ class PowerQuantApp(tk.Tk):
         returns_data,
         volatility_data,
         correlation_data,
+        feature_data,
         price_area,
         time_range,
         resolution
     ):
 
         self.clear_window()
+
+        # --------------------------------------------------
+        # Header
+        # --------------------------------------------------
 
         navigation = tk.Frame(
             self
@@ -533,6 +687,10 @@ class PowerQuantApp(tk.Tk):
             pady=20
         )
 
+        # --------------------------------------------------
+        # Market information
+        # --------------------------------------------------
+
         info_frame = tk.Frame(
             content
         )
@@ -542,9 +700,11 @@ class PowerQuantApp(tk.Tk):
             pady=(0, 10)
         )
 
-        latest_price = prices[
-            "DayAheadPriceEUR"
-        ].iloc[-1]
+        latest_price = (
+            prices[
+                "DayAheadPriceEUR"
+            ].iloc[-1]
+        )
 
         information = [
             (
@@ -589,6 +749,10 @@ class PowerQuantApp(tk.Tk):
             ).pack(
                 side="left"
             )
+
+        # --------------------------------------------------
+        # Navigation buttons
+        # --------------------------------------------------
 
         analysis_navigation = (
             tk.Frame(
@@ -711,6 +875,16 @@ class PowerQuantApp(tk.Tk):
                     price_area,
                     time_range
                 )
+            ),
+            (
+                "Market Factors",
+                lambda:
+                self.market_factors_view.show(
+                    analysis_content,
+                    feature_data,
+                    price_area,
+                    time_range
+                )
             )
         ]
 
@@ -733,9 +907,9 @@ class PowerQuantApp(tk.Tk):
             resolution
         )
 
-    # --------------------------------------------------
+    # ==================================================
     # Price
-    # --------------------------------------------------
+    # ==================================================
 
     def show_price_view(
         self,
@@ -751,7 +925,8 @@ class PowerQuantApp(tk.Tk):
         )
 
         figure = (
-            self.chart_builder.create_price_chart(
+            self.chart_builder
+            .create_price_chart(
                 chart_data,
                 price_area,
                 time_range,
@@ -764,9 +939,9 @@ class PowerQuantApp(tk.Tk):
             figure
         )
 
-    # --------------------------------------------------
+    # ==================================================
     # Returns
-    # --------------------------------------------------
+    # ==================================================
 
     def show_returns_view(
         self,
@@ -781,7 +956,8 @@ class PowerQuantApp(tk.Tk):
         )
 
         statistics = (
-            self.return_calculator.get_return_statistics(
+            self.return_calculator
+            .get_return_statistics(
                 returns_data
             )
         )
@@ -797,21 +973,15 @@ class PowerQuantApp(tk.Tk):
         values = [
             (
                 "Mean Return",
-                statistics[
-                    "mean"
-                ]
+                statistics["mean"]
             ),
             (
                 "Minimum Return",
-                statistics[
-                    "minimum"
-                ]
+                statistics["minimum"]
             ),
             (
                 "Maximum Return",
-                statistics[
-                    "maximum"
-                ]
+                statistics["maximum"]
             )
         ]
 
@@ -834,7 +1004,8 @@ class PowerQuantApp(tk.Tk):
             )
 
         figure = (
-            self.chart_builder.create_returns_chart(
+            self.chart_builder
+            .create_returns_chart(
                 returns_data,
                 price_area,
                 time_range
@@ -846,9 +1017,9 @@ class PowerQuantApp(tk.Tk):
             figure
         )
 
-    # --------------------------------------------------
+    # ==================================================
     # Statistics
-    # --------------------------------------------------
+    # ==================================================
 
     def show_statistics_view(
         self,
@@ -863,7 +1034,8 @@ class PowerQuantApp(tk.Tk):
         )
 
         statistics = (
-            self.statistics_analyzer.calculate_statistics(
+            self.statistics_analyzer
+            .calculate_statistics(
                 returns_data
             )
         )
@@ -929,7 +1101,8 @@ class PowerQuantApp(tk.Tk):
             )
 
         figure = (
-            self.chart_builder.create_distribution_chart(
+            self.chart_builder
+            .create_distribution_chart(
                 returns_data,
                 price_area,
                 time_range
@@ -941,9 +1114,9 @@ class PowerQuantApp(tk.Tk):
             figure
         )
 
-    # --------------------------------------------------
+    # ==================================================
     # Volatility
-    # --------------------------------------------------
+    # ==================================================
 
     def show_volatility_view(
         self,
@@ -958,7 +1131,8 @@ class PowerQuantApp(tk.Tk):
         )
 
         statistics = (
-            self.volatility_analyzer.get_volatility_statistics(
+            self.volatility_analyzer
+            .get_volatility_statistics(
                 volatility_data
             )
         )
@@ -974,27 +1148,19 @@ class PowerQuantApp(tk.Tk):
         values = [
             (
                 "Current 7-Period",
-                statistics[
-                    "current_7"
-                ]
+                statistics["current_7"]
             ),
             (
                 "Current 30-Period",
-                statistics[
-                    "current_30"
-                ]
+                statistics["current_30"]
             ),
             (
                 "Average 30-Period",
-                statistics[
-                    "average_30"
-                ]
+                statistics["average_30"]
             ),
             (
                 "Maximum 30-Period",
-                statistics[
-                    "maximum_30"
-                ]
+                statistics["maximum_30"]
             )
         ]
 
@@ -1017,7 +1183,8 @@ class PowerQuantApp(tk.Tk):
             )
 
         figure = (
-            self.chart_builder.create_volatility_chart(
+            self.chart_builder
+            .create_volatility_chart(
                 volatility_data,
                 price_area,
                 time_range
@@ -1029,9 +1196,9 @@ class PowerQuantApp(tk.Tk):
             figure
         )
 
-    # --------------------------------------------------
+    # ==================================================
     # Correlation
-    # --------------------------------------------------
+    # ==================================================
 
     def show_correlation_view(
         self,
@@ -1045,7 +1212,8 @@ class PowerQuantApp(tk.Tk):
         )
 
         statistics = (
-            self.correlation_analyzer.calculate_correlation(
+            self.correlation_analyzer
+            .calculate_correlation(
                 correlation_data
             )
         )
@@ -1067,9 +1235,7 @@ class PowerQuantApp(tk.Tk):
             ),
             (
                 "Relationship",
-                statistics[
-                    "strength"
-                ]
+                statistics["strength"]
             ),
             (
                 "Matched Observations",
@@ -1098,7 +1264,8 @@ class PowerQuantApp(tk.Tk):
             )
 
         figure = (
-            self.chart_builder.create_correlation_chart(
+            self.chart_builder
+            .create_correlation_chart(
                 correlation_data,
                 time_range
             )
@@ -1109,9 +1276,9 @@ class PowerQuantApp(tk.Tk):
             figure
         )
 
-    # --------------------------------------------------
+    # ==================================================
     # Portfolio
-    # --------------------------------------------------
+    # ==================================================
 
     def show_portfolio_view(
         self,
@@ -1140,9 +1307,8 @@ class PowerQuantApp(tk.Tk):
         tk.Label(
             container,
             text=(
-                "Adjust the DK1 portfolio weight manually, "
-                "or let PowerQuant find the "
-                "minimum-volatility portfolio."
+                "Adjust the DK1 weight manually "
+                "or find the minimum-volatility portfolio."
             ),
             font=(
                 "Arial",
@@ -1205,14 +1371,16 @@ class PowerQuantApp(tk.Tk):
             )
 
             portfolio_data = (
-                self.portfolio_analyzer.build_portfolio(
+                self.portfolio_analyzer
+                .build_portfolio(
                     correlation_data,
                     dk1_weight
                 )
             )
 
             statistics = (
-                self.portfolio_analyzer.calculate_portfolio_statistics(
+                self.portfolio_analyzer
+                .calculate_portfolio_statistics(
                     portfolio_data,
                     dk1_weight
                 )
@@ -1279,7 +1447,8 @@ class PowerQuantApp(tk.Tk):
                 )
 
             figure = (
-                self.chart_builder.create_portfolio_chart(
+                self.chart_builder
+                .create_portfolio_chart(
                     portfolio_data,
                     time_range,
                     dk1_weight
@@ -1305,15 +1474,14 @@ class PowerQuantApp(tk.Tk):
         def optimize_portfolio():
 
             optimal = (
-                self.portfolio_optimizer.find_minimum_volatility_portfolio(
+                self.portfolio_optimizer
+                .find_minimum_volatility_portfolio(
                     correlation_data
                 )
             )
 
             optimal_weight = (
-                optimal[
-                    "dk1_weight"
-                ]
+                optimal["dk1_weight"]
             )
 
             weight_variable.set(
@@ -1342,7 +1510,9 @@ class PowerQuantApp(tk.Tk):
         tk.Button(
             controls,
             text="Update Portfolio",
-            command=update_manual_portfolio
+            command=(
+                update_manual_portfolio
+            )
         ).pack(
             side="left",
             padx=10
@@ -1356,7 +1526,9 @@ class PowerQuantApp(tk.Tk):
                 10,
                 "bold"
             ),
-            command=optimize_portfolio
+            command=(
+                optimize_portfolio
+            )
         ).pack(
             side="left",
             padx=10
@@ -1366,9 +1538,9 @@ class PowerQuantApp(tk.Tk):
             0.50
         )
 
-    # --------------------------------------------------
+    # ==================================================
     # Risk
-    # --------------------------------------------------
+    # ==================================================
 
     def show_risk_view(
         self,
@@ -1396,13 +1568,15 @@ class PowerQuantApp(tk.Tk):
         )
 
         var_statistics = (
-            self.var_analyzer.calculate_historical_var(
+            self.var_analyzer
+            .calculate_historical_var(
                 returns_data
             )
         )
 
         es_statistics = (
-            self.es_analyzer.calculate_historical_expected_shortfall(
+            self.es_analyzer
+            .calculate_historical_expected_shortfall(
                 returns_data
             )
         )
@@ -1474,7 +1648,8 @@ class PowerQuantApp(tk.Tk):
             )
 
         figure = (
-            self.chart_builder.create_risk_chart(
+            self.chart_builder
+            .create_risk_chart(
                 returns_data,
                 price_area,
                 time_range,
@@ -1488,9 +1663,9 @@ class PowerQuantApp(tk.Tk):
             figure
         )
 
-    # --------------------------------------------------
+    # ==================================================
     # Monte Carlo
-    # --------------------------------------------------
+    # ==================================================
 
     def show_monte_carlo_view(
         self,
@@ -1541,7 +1716,9 @@ class PowerQuantApp(tk.Tk):
 
         ttk.Combobox(
             controls,
-            textvariable=simulations_variable,
+            textvariable=(
+                simulations_variable
+            ),
             values=[
                 "1000",
                 "5000",
@@ -1570,7 +1747,9 @@ class PowerQuantApp(tk.Tk):
 
         ttk.Combobox(
             controls,
-            textvariable=horizon_variable,
+            textvariable=(
+                horizon_variable
+            ),
             values=[
                 "10",
                 "30",
@@ -1608,7 +1787,8 @@ class PowerQuantApp(tk.Tk):
             )
 
             results = (
-                self.monte_carlo_simulator.run_simulation(
+                self.monte_carlo_simulator
+                .run_simulation(
                     returns_data,
                     simulations=simulations,
                     horizon=horizon
@@ -1627,23 +1807,33 @@ class PowerQuantApp(tk.Tk):
             stats = [
                 (
                     "Expected Ending Return",
-                    f"{results['expected_return']:.2f}%"
+                    (
+                        f"{results['expected_return']:.2f}%"
+                    )
                 ),
                 (
                     "Median Ending Return",
-                    f"{results['median_return']:.2f}%"
+                    (
+                        f"{results['median_return']:.2f}%"
+                    )
                 ),
                 (
                     "5th Percentile",
-                    f"{results['percentile_5']:.2f}%"
+                    (
+                        f"{results['percentile_5']:.2f}%"
+                    )
                 ),
                 (
                     "95th Percentile",
-                    f"{results['percentile_95']:.2f}%"
+                    (
+                        f"{results['percentile_95']:.2f}%"
+                    )
                 ),
                 (
                     "Probability of Loss",
-                    f"{results['probability_of_loss']:.2f}%"
+                    (
+                        f"{results['probability_of_loss']:.2f}%"
+                    )
                 )
             ]
 
@@ -1666,7 +1856,8 @@ class PowerQuantApp(tk.Tk):
                 )
 
             figure = (
-                self.chart_builder.create_monte_carlo_chart(
+                self.chart_builder
+                .create_monte_carlo_chart(
                     results,
                     price_area,
                     time_range
@@ -1693,9 +1884,9 @@ class PowerQuantApp(tk.Tk):
 
         run_simulation()
 
-    # --------------------------------------------------
-    # Stress Test
-    # --------------------------------------------------
+    # ==================================================
+    # Stress testing
+    # ==================================================
 
     def show_stress_test_view(
         self,
@@ -1739,7 +1930,8 @@ class PowerQuantApp(tk.Tk):
         )
 
         scenarios = (
-            self.stress_tester.get_scenarios()
+            self.stress_tester
+            .get_scenarios()
         )
 
         scenario_variable = (
@@ -1750,7 +1942,9 @@ class PowerQuantApp(tk.Tk):
 
         ttk.Combobox(
             controls,
-            textvariable=scenario_variable,
+            textvariable=(
+                scenario_variable
+            ),
             values=scenarios,
             state="readonly",
             width=22
@@ -1775,7 +1969,8 @@ class PowerQuantApp(tk.Tk):
             )
 
             results = (
-                self.stress_tester.run_stress_test(
+                self.stress_tester
+                .run_stress_test(
                     returns_data,
                     scenario_variable.get()
                 )
@@ -1793,27 +1988,39 @@ class PowerQuantApp(tk.Tk):
             stats = [
                 (
                     "Market Shock",
-                    f"{results['market_shock']:.1f}%"
+                    (
+                        f"{results['market_shock']:.1f}%"
+                    )
                 ),
                 (
                     "Baseline Return",
-                    f"{results['baseline_mean']:.2f}%"
+                    (
+                        f"{results['baseline_mean']:.2f}%"
+                    )
                 ),
                 (
                     "Stressed Return",
-                    f"{results['stressed_return']:.2f}%"
+                    (
+                        f"{results['stressed_return']:.2f}%"
+                    )
                 ),
                 (
                     "Baseline Volatility",
-                    f"{results['baseline_volatility']:.2f}%"
+                    (
+                        f"{results['baseline_volatility']:.2f}%"
+                    )
                 ),
                 (
                     "Stressed Volatility",
-                    f"{results['stressed_volatility']:.2f}%"
+                    (
+                        f"{results['stressed_volatility']:.2f}%"
+                    )
                 ),
                 (
                     "Estimated Loss",
-                    f"{results['estimated_loss']:.2f}%"
+                    (
+                        f"{results['estimated_loss']:.2f}%"
+                    )
                 )
             ]
 
@@ -1836,7 +2043,8 @@ class PowerQuantApp(tk.Tk):
                 )
 
             figure = (
-                self.chart_builder.create_stress_test_chart(
+                self.chart_builder
+                .create_stress_test_chart(
                     results,
                     price_area,
                     time_range
@@ -1863,9 +2071,9 @@ class PowerQuantApp(tk.Tk):
 
         run_stress_test()
 
-    # --------------------------------------------------
+    # ==================================================
     # Forecast
-    # --------------------------------------------------
+    # ==================================================
 
     def show_forecast_view(
         self,
@@ -1895,8 +2103,9 @@ class PowerQuantApp(tk.Tk):
         tk.Label(
             container,
             text=(
-                "Create a simple short-term price forecast "
-                "using either a moving average or linear trend."
+                "Create a baseline price forecast "
+                "using a moving average "
+                "or linear trend."
             ),
             font=(
                 "Arial",
@@ -1931,7 +2140,9 @@ class PowerQuantApp(tk.Tk):
 
         ttk.Combobox(
             controls,
-            textvariable=method_variable,
+            textvariable=(
+                method_variable
+            ),
             values=[
                 "Moving Average",
                 "Linear Trend"
@@ -1958,7 +2169,9 @@ class PowerQuantApp(tk.Tk):
 
         ttk.Combobox(
             controls,
-            textvariable=horizon_variable,
+            textvariable=(
+                horizon_variable
+            ),
             values=[
                 "5",
                 "10",
@@ -2015,9 +2228,7 @@ class PowerQuantApp(tk.Tk):
             stats = [
                 (
                     "Method",
-                    results[
-                        "method"
-                    ]
+                    results["method"]
                 ),
                 (
                     "Current Price",
@@ -2067,7 +2278,8 @@ class PowerQuantApp(tk.Tk):
                 )
 
             figure = (
-                self.chart_builder.create_forecast_chart(
+                self.chart_builder
+                .create_forecast_chart(
                     price_data,
                     results,
                     price_area,
