@@ -6,7 +6,9 @@ from sklearn.ensemble import (
     GradientBoostingRegressor
 )
 
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import (
+    LinearRegression
+)
 
 from sklearn.metrics import (
     mean_absolute_error,
@@ -14,30 +16,52 @@ from sklearn.metrics import (
     r2_score
 )
 
-from sklearn.model_selection import TimeSeriesSplit
+from sklearn.model_selection import (
+    TimeSeriesSplit
+)
 
 
 class MachineLearningForecaster:
 
     def __init__(self):
 
+        # ==================================================
+        # Model features
+        # ==================================================
+
         self.feature_columns = [
+            # Price
             "DayAheadPriceEUR",
-            "WindGenerationMW",
-            "ElectricityDemandMW",
-            "WindDemandRatio",
-            "HourOfDay",
-            "DayOfWeek",
-            "Month",
-            "IsWeekend",
             "PriceLag1",
             "PriceLag2",
             "PriceLag24",
-            "WindLag1",
-            "DemandLag1",
             "PriceMovingAverage6",
             "PriceMovingAverage24",
-            "PriceVolatility24"
+            "PriceVolatility24",
+
+            # Electricity system
+            "WindGenerationMW",
+            "ElectricityDemandMW",
+            "WindDemandRatio",
+            "WindLag1",
+            "DemandLag1",
+
+            # Weather
+            "TemperatureC",
+            "WeatherWindSpeedMS",
+            "CloudCoverPct",
+            "PrecipitationMM",
+            "WeatherWindLag1",
+            "TemperatureLag1",
+            "CloudCoverLag1",
+            "WeatherWindAverage6",
+            "TemperatureAverage6",
+
+            # Calendar
+            "HourOfDay",
+            "DayOfWeek",
+            "Month",
+            "IsWeekend"
         ]
 
     # ==================================================
@@ -61,8 +85,11 @@ class MachineLearningForecaster:
 
         missing_columns = [
             column
-            for column in self.feature_columns
-            if column not in data.columns
+            for column
+            in self.feature_columns
+            if column not in (
+                data.columns
+            )
         ]
 
         if missing_columns:
@@ -75,13 +102,15 @@ class MachineLearningForecaster:
             )
 
         # --------------------------------------------------
-        # Forecast target
+        # Target:
         #
-        # Features at time t
-        # predict price at time t + 1
+        # Features at hour t
+        # predict electricity price at hour t + 1
         # --------------------------------------------------
 
-        data["NextPrice"] = (
+        data[
+            "NextPrice"
+        ] = (
             data[
                 "DayAheadPriceEUR"
             ].shift(-1)
@@ -99,7 +128,9 @@ class MachineLearningForecaster:
             data.dropna(
                 subset=(
                     self.feature_columns
-                    + ["NextPrice"]
+                    + [
+                        "NextPrice"
+                    ]
                 )
             )
             .copy()
@@ -108,11 +139,13 @@ class MachineLearningForecaster:
             )
         )
 
-        if len(model_data) < 40:
+        if len(
+            model_data
+        ) < 40:
 
             return None, (
-                "Not enough observations for "
-                "machine-learning validation. "
+                "Not enough complete observations "
+                "for machine-learning validation. "
                 "Try using 1 Month or 1 Year."
             )
 
@@ -122,7 +155,7 @@ class MachineLearningForecaster:
         )
 
     # ==================================================
-    # Model factory
+    # Models
     # ==================================================
 
     def _create_models(
@@ -153,7 +186,7 @@ class MachineLearningForecaster:
         }
 
     # ==================================================
-    # Model comparison with time-series validation
+    # Model comparison
     # ==================================================
 
     def compare_models(
@@ -172,13 +205,29 @@ class MachineLearningForecaster:
 
         if error_message is not None:
 
-            return self._empty_comparison_result(
-                error_message
+            return (
+                self._empty_comparison_result(
+                    error_message
+                )
             )
 
-        # --------------------------------------------------
-        # Make sure number of folds is realistic
-        # --------------------------------------------------
+        X = (
+            model_data[
+                self.feature_columns
+            ]
+        )
+
+        y = (
+            model_data[
+                "NextPrice"
+            ]
+        )
+
+        times = (
+            model_data[
+                "TimeDK"
+            ]
+        )
 
         maximum_splits = (
             len(model_data)
@@ -192,21 +241,14 @@ class MachineLearningForecaster:
 
         if n_splits < 2:
 
-            return self._empty_comparison_result(
-                "Not enough data for time-series validation."
+            return (
+                self._empty_comparison_result(
+                    (
+                        "Not enough data for "
+                        "time-series validation."
+                    )
+                )
             )
-
-        X = model_data[
-            self.feature_columns
-        ]
-
-        y = model_data[
-            "NextPrice"
-        ]
-
-        times = model_data[
-            "TimeDK"
-        ]
 
         time_series_split = (
             TimeSeriesSplit(
@@ -216,13 +258,9 @@ class MachineLearningForecaster:
 
         models = (
             self._create_models(
-                random_state=random_state
+                random_state
             )
         )
-
-        # --------------------------------------------------
-        # Containers for predictions
-        # --------------------------------------------------
 
         model_predictions = {
             "Naive Baseline": [],
@@ -248,7 +286,9 @@ class MachineLearningForecaster:
                 test_index
             )
         ) in enumerate(
-            time_series_split.split(X),
+            time_series_split.split(
+                X
+            ),
             start=1
         ):
 
@@ -268,18 +308,17 @@ class MachineLearningForecaster:
                 test_index
             ]
 
-            test_times = times.iloc[
-                test_index
-            ]
+            test_times = (
+                times.iloc[
+                    test_index
+                ]
+            )
 
-            # ----------------------------------------------
+            # --------------------------------------------------
             # Naive baseline
-            #
-            # Predict:
-            # next price = current price
-            # ----------------------------------------------
+            # --------------------------------------------------
 
-            baseline_prediction = (
+            baseline_predictions = (
                 X_test[
                     "DayAheadPriceEUR"
                 ].to_numpy()
@@ -288,14 +327,21 @@ class MachineLearningForecaster:
             model_predictions[
                 "Naive Baseline"
             ].extend(
-                baseline_prediction
+                baseline_predictions
             )
 
-            # ----------------------------------------------
-            # Machine-learning models
-            # ----------------------------------------------
+            baseline_fold_mae = (
+                mean_absolute_error(
+                    y_test,
+                    baseline_predictions
+                )
+            )
 
-            fold_model_scores = {}
+            # --------------------------------------------------
+            # ML models
+            # --------------------------------------------------
+
+            fold_scores = {}
 
             for (
                 model_name,
@@ -319,27 +365,14 @@ class MachineLearningForecaster:
                     predictions
                 )
 
-                fold_mae = (
+                fold_scores[
+                    model_name
+                ] = (
                     mean_absolute_error(
                         y_test,
                         predictions
                     )
                 )
-
-                fold_model_scores[
-                    model_name
-                ] = fold_mae
-
-            # ----------------------------------------------
-            # Baseline fold score
-            # ----------------------------------------------
-
-            baseline_fold_mae = (
-                mean_absolute_error(
-                    y_test,
-                    baseline_prediction
-                )
-            )
 
             fold_results.append(
                 {
@@ -347,26 +380,30 @@ class MachineLearningForecaster:
                         fold_number,
 
                     "train_size":
-                        len(train_index),
+                        len(
+                            train_index
+                        ),
 
                     "test_size":
-                        len(test_index),
+                        len(
+                            test_index
+                        ),
 
                     "baseline_mae":
                         baseline_fold_mae,
 
                     "linear_regression_mae":
-                        fold_model_scores[
+                        fold_scores[
                             "Linear Regression"
                         ],
 
                     "random_forest_mae":
-                        fold_model_scores[
+                        fold_scores[
                             "Random Forest"
                         ],
 
                     "gradient_boosting_mae":
-                        fold_model_scores[
+                        fold_scores[
                             "Gradient Boosting"
                         ]
                 }
@@ -399,7 +436,9 @@ class MachineLearningForecaster:
         for (
             model_name,
             predictions
-        ) in model_predictions.items():
+        ) in (
+            model_predictions.items()
+        ):
 
             predictions = np.array(
                 predictions
@@ -439,7 +478,9 @@ class MachineLearningForecaster:
                 == "Naive Baseline"
             ):
 
-                baseline_mae = mae
+                baseline_mae = (
+                    mae
+                )
 
             comparison_rows.append(
                 {
@@ -463,17 +504,17 @@ class MachineLearningForecaster:
             )
         )
 
-        # --------------------------------------------------
-        # Improvement vs baseline
-        # --------------------------------------------------
-
         improvements = []
 
         for _, row in (
             comparison_table.iterrows()
         ):
 
-            if baseline_mae > 0:
+            if (
+                baseline_mae is not None
+                and
+                baseline_mae > 0
+            ):
 
                 improvement = (
                     (
@@ -506,18 +547,18 @@ class MachineLearningForecaster:
         )
 
         best_model_name = (
-            comparison_table.iloc[0][
-                "Model"
-            ]
+            comparison_table.iloc[
+                0
+            ]["Model"]
         )
 
         # ==================================================
-        # Train final models on all available observations
+        # Fit final models on full dataset
         # ==================================================
 
         final_models = (
             self._create_models(
-                random_state=random_state
+                random_state
             )
         )
 
@@ -526,7 +567,9 @@ class MachineLearningForecaster:
         for (
             model_name,
             model
-        ) in final_models.items():
+        ) in (
+            final_models.items()
+        ):
 
             model.fit(
                 X,
@@ -537,9 +580,9 @@ class MachineLearningForecaster:
                 model_name
             ] = model
 
-        # --------------------------------------------------
-        # Latest row for next-price prediction
-        # --------------------------------------------------
+        # ==================================================
+        # Next-price prediction
+        # ==================================================
 
         prediction_data = (
             feature_dataframe.copy()
@@ -562,11 +605,16 @@ class MachineLearningForecaster:
         )
 
         current_price = 0
+
         next_price_prediction = 0
+
         predicted_change = 0
+
         predicted_change_percent = 0
 
-        if not prediction_data.empty:
+        if not (
+            prediction_data.empty
+        ):
 
             latest_row = (
                 prediction_data.iloc[
@@ -624,7 +672,7 @@ class MachineLearningForecaster:
                 ) * 100
 
         # ==================================================
-        # Feature importance for best ML model
+        # Feature importance
         # ==================================================
 
         feature_importance = (
@@ -713,14 +761,12 @@ class MachineLearningForecaster:
                     )
                 )
 
-        # ==================================================
-        # Best-model validation predictions
-        # ==================================================
-
-        best_predictions = np.array(
-            model_predictions[
-                best_model_name
-            ]
+        best_predictions = (
+            np.array(
+                model_predictions[
+                    best_model_name
+                ]
+            )
         )
 
         return {
@@ -728,7 +774,10 @@ class MachineLearningForecaster:
                 True,
 
             "message":
-                "Model comparison completed successfully.",
+                (
+                    "Weather-enhanced model "
+                    "comparison completed."
+                ),
 
             "comparison_table":
                 comparison_table,
@@ -766,19 +815,21 @@ class MachineLearningForecaster:
                 ),
 
             "total_observations":
-                len(model_data),
+                len(
+                    model_data
+                ),
 
             "validation_observations":
-                len(actual_values),
+                len(
+                    actual_values
+                ),
 
             "n_splits":
                 n_splits
         }
 
     # ==================================================
-    # Existing Random Forest method
-    #
-    # Kept so older PowerQuant code still works.
+    # Random Forest compatibility method
     # ==================================================
 
     def train_random_forest(
@@ -792,14 +843,18 @@ class MachineLearningForecaster:
         (
             model_data,
             error_message
-        ) = self._prepare_model_data(
-            feature_dataframe
+        ) = (
+            self._prepare_model_data(
+                feature_dataframe
+            )
         )
 
         if error_message is not None:
 
-            return self._empty_random_forest_result(
-                error_message
+            return (
+                self._empty_random_forest_result(
+                    error_message
+                )
             )
 
         X = model_data[
@@ -811,7 +866,9 @@ class MachineLearningForecaster:
         ]
 
         split_index = int(
-            len(model_data)
+            len(
+                model_data
+            )
             * (
                 1
                 - test_size
@@ -822,7 +879,9 @@ class MachineLearningForecaster:
             1,
             min(
                 split_index,
-                len(model_data) - 1
+                len(
+                    model_data
+                ) - 1
             )
         )
 
@@ -842,11 +901,13 @@ class MachineLearningForecaster:
             split_index:
         ]
 
-        test_times = model_data[
-            "TimeDK"
-        ].iloc[
-            split_index:
-        ]
+        test_times = (
+            model_data[
+                "TimeDK"
+            ].iloc[
+                split_index:
+            ]
+        )
 
         model = (
             RandomForestRegressor(
@@ -883,7 +944,9 @@ class MachineLearningForecaster:
             )
         )
 
-        if len(y_test) >= 2:
+        if len(
+            y_test
+        ) >= 2:
 
             r2 = (
                 r2_score(
@@ -943,25 +1006,36 @@ class MachineLearningForecaster:
         )
 
         current_price = 0
+
         next_price_prediction = 0
+
         predicted_change = 0
+
         predicted_change_percent = 0
 
         prediction_data = (
-            feature_dataframe
-            .replace(
+            feature_dataframe.copy()
+        )
+
+        prediction_data = (
+            prediction_data.replace(
                 [
                     np.inf,
                     -np.inf
                 ],
                 np.nan
             )
-            .dropna(
+        )
+
+        prediction_data = (
+            prediction_data.dropna(
                 subset=self.feature_columns
             )
         )
 
-        if not prediction_data.empty:
+        if not (
+            prediction_data.empty
+        ):
 
             latest_row = (
                 prediction_data.iloc[
@@ -1006,7 +1080,10 @@ class MachineLearningForecaster:
                 True,
 
             "message":
-                "Random Forest model trained successfully.",
+                (
+                    "Weather-enhanced Random Forest "
+                    "trained successfully."
+                ),
 
             "model":
                 model,
@@ -1051,13 +1128,19 @@ class MachineLearningForecaster:
                 feature_importance,
 
             "training_observations":
-                len(X_train),
+                len(
+                    X_train
+                ),
 
             "testing_observations":
-                len(X_test),
+                len(
+                    X_test
+                ),
 
             "total_observations":
-                len(model_data)
+                len(
+                    model_data
+                )
         }
 
     # ==================================================

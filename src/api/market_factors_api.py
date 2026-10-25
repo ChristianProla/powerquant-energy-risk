@@ -1,5 +1,8 @@
 import requests
 import pandas as pd
+import numpy as np
+
+from src.api.weather_api import WeatherAPI
 
 
 class MarketFactorsAPI:
@@ -11,6 +14,14 @@ class MarketFactorsAPI:
             "dataset/GenerationProdTypeExchange"
         )
 
+        self.weather_api = (
+            WeatherAPI()
+        )
+
+    # ==================================================
+    # Main method
+    # ==================================================
+
     def get_market_factors(
         self,
         price_area="DK1",
@@ -18,15 +29,62 @@ class MarketFactorsAPI:
         end_date="now"
     ):
 
+        energy_data = (
+            self._get_energy_factors(
+                price_area,
+                start_date,
+                end_date
+            )
+        )
+
+        if energy_data.empty:
+
+            return energy_data
+
+        weather_data = (
+            self.weather_api.get_weather(
+                price_area=price_area,
+                start_date=start_date,
+                end_date=end_date
+            )
+        )
+
+        combined_data = (
+            self._merge_weather_data(
+                energy_data,
+                weather_data
+            )
+        )
+
+        return combined_data
+
+    # ==================================================
+    # Energinet market factors
+    # ==================================================
+
+    def _get_energy_factors(
+        self,
+        price_area,
+        start_date,
+        end_date
+    ):
+
         params = {
-            "filter": (
-                '{"PriceArea":["'
-                + price_area
-                + '"]}'
-            ),
-            "start": start_date,
-            "end": end_date,
-            "limit": 0
+            "filter":
+                (
+                    '{"PriceArea":["'
+                    + price_area
+                    + '"]}'
+                ),
+
+            "start":
+                start_date,
+
+            "end":
+                end_date,
+
+            "limit":
+                0
         }
 
         response = requests.get(
@@ -49,18 +107,19 @@ class MarketFactorsAPI:
         )
 
         if dataframe.empty:
+
             return dataframe
 
-        return self._prepare_data(
+        return self._prepare_energy_data(
             dataframe,
             price_area
         )
 
-    # --------------------------------------------------
-    # Prepare data
-    # --------------------------------------------------
+    # ==================================================
+    # Prepare Energinet data
+    # ==================================================
 
-    def _prepare_data(
+    def _prepare_energy_data(
         self,
         dataframe,
         price_area
@@ -81,20 +140,24 @@ class MarketFactorsAPI:
                 "in market factor data."
             )
 
-        data[time_column] = pd.to_datetime(
+        data[
+            time_column
+        ] = pd.to_datetime(
             data[time_column],
             errors="coerce"
         )
 
         result = pd.DataFrame()
 
-        result["TimeDK"] = data[
+        result[
+            "TimeDK"
+        ] = data[
             time_column
         ]
 
-        result["PriceArea"] = (
-            price_area
-        )
+        result[
+            "PriceArea"
+        ] = price_area
 
         # --------------------------------------------------
         # Wind generation
@@ -111,7 +174,9 @@ class MarketFactorsAPI:
             result[
                 "WindGenerationMW"
             ] = pd.to_numeric(
-                data[wind_column],
+                data[
+                    wind_column
+                ],
                 errors="coerce"
             )
 
@@ -124,7 +189,7 @@ class MarketFactorsAPI:
             )
 
         # --------------------------------------------------
-        # Demand / consumption
+        # Electricity demand
         # --------------------------------------------------
 
         demand_column = (
@@ -138,7 +203,9 @@ class MarketFactorsAPI:
             result[
                 "ElectricityDemandMW"
             ] = pd.to_numeric(
-                data[demand_column],
+                data[
+                    demand_column
+                ],
                 errors="coerce"
             )
 
@@ -146,12 +213,36 @@ class MarketFactorsAPI:
 
             result[
                 "ElectricityDemandMW"
-            ] = float("nan")
+            ] = np.nan
 
         result = result.dropna(
             subset=[
                 "TimeDK"
             ]
+        )
+
+        result[
+            "TimeDK"
+        ] = (
+            result[
+                "TimeDK"
+            ].dt.floor("h")
+        )
+
+        result = (
+            result.groupby(
+                [
+                    "TimeDK",
+                    "PriceArea"
+                ],
+                as_index=False
+            )[
+                [
+                    "WindGenerationMW",
+                    "ElectricityDemandMW"
+                ]
+            ]
+            .mean()
         )
 
         result = result.sort_values(
@@ -164,9 +255,72 @@ class MarketFactorsAPI:
 
         return result
 
-    # --------------------------------------------------
+    # ==================================================
+    # Merge weather
+    # ==================================================
+
+    def _merge_weather_data(
+        self,
+        energy_data,
+        weather_data
+    ):
+
+        result = energy_data.copy()
+
+        weather_columns = [
+            "TemperatureC",
+            "WeatherWindSpeedMS",
+            "CloudCoverPct",
+            "PrecipitationMM"
+        ]
+
+        if weather_data.empty:
+
+            for column in weather_columns:
+
+                result[
+                    column
+                ] = np.nan
+
+            return result
+
+        weather = weather_data.copy()
+
+        weather[
+            "TimeDK"
+        ] = pd.to_datetime(
+            weather["TimeDK"],
+            errors="coerce"
+        )
+
+        weather[
+            "TimeDK"
+        ] = (
+            weather[
+                "TimeDK"
+            ].dt.floor("h")
+        )
+
+        weather = (
+            weather.groupby(
+                "TimeDK",
+                as_index=False
+            )[weather_columns]
+            .mean()
+        )
+
+        result = pd.merge(
+            result,
+            weather,
+            on="TimeDK",
+            how="left"
+        )
+
+        return result
+
+    # ==================================================
     # Find timestamp
-    # --------------------------------------------------
+    # ==================================================
 
     def _find_time_column(
         self,
@@ -190,7 +344,9 @@ class MarketFactorsAPI:
 
         for column in dataframe.columns:
 
-            name = column.lower()
+            name = (
+                column.lower()
+            )
 
             if (
                 "time" in name
@@ -202,9 +358,9 @@ class MarketFactorsAPI:
 
         return None
 
-    # --------------------------------------------------
-    # Find total wind column
-    # --------------------------------------------------
+    # ==================================================
+    # Wind generation
+    # ==================================================
 
     def _find_total_wind_column(
         self,
@@ -226,7 +382,9 @@ class MarketFactorsAPI:
 
         for column in dataframe.columns:
 
-            name = column.lower()
+            name = (
+                column.lower()
+            )
 
             if (
                 "wind" in name
@@ -238,10 +396,6 @@ class MarketFactorsAPI:
 
         return None
 
-    # --------------------------------------------------
-    # Sum onshore + offshore wind
-    # --------------------------------------------------
-
     def _sum_wind_columns(
         self,
         dataframe
@@ -251,9 +405,12 @@ class MarketFactorsAPI:
 
         for column in dataframe.columns:
 
-            name = column.lower()
+            name = (
+                column.lower()
+            )
 
             if "wind" not in name:
+
                 continue
 
             if (
@@ -263,6 +420,7 @@ class MarketFactorsAPI:
                 or
                 "capacity" in name
             ):
+
                 continue
 
             if (
@@ -278,15 +436,17 @@ class MarketFactorsAPI:
         if not wind_columns:
 
             return pd.Series(
-                float("nan"),
+                np.nan,
                 index=dataframe.index
             )
 
-        numeric_wind = dataframe[
-            wind_columns
-        ].apply(
-            pd.to_numeric,
-            errors="coerce"
+        numeric_wind = (
+            dataframe[
+                wind_columns
+            ].apply(
+                pd.to_numeric,
+                errors="coerce"
+            )
         )
 
         return numeric_wind.sum(
@@ -294,9 +454,9 @@ class MarketFactorsAPI:
             min_count=1
         )
 
-    # --------------------------------------------------
-    # Find demand column
-    # --------------------------------------------------
+    # ==================================================
+    # Electricity demand
+    # ==================================================
 
     def _find_demand_column(
         self,
@@ -320,7 +480,9 @@ class MarketFactorsAPI:
 
         for column in dataframe.columns:
 
-            name = column.lower()
+            name = (
+                column.lower()
+            )
 
             if (
                 "consumption" in name

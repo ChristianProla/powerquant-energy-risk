@@ -1,8 +1,12 @@
-import pandas as pd
 import numpy as np
+import pandas as pd
 
 
 class FeatureEngineer:
+
+    # ==================================================
+    # Create features
+    # ==================================================
 
     def create_market_features(
         self,
@@ -18,22 +22,28 @@ class FeatureEngineer:
 
             return pd.DataFrame()
 
-        prices = price_dataframe.copy()
+        prices = (
+            price_dataframe.copy()
+        )
 
         factors = (
             market_factors_dataframe.copy()
         )
 
         # --------------------------------------------------
-        # Convert timestamps
+        # Timestamps
         # --------------------------------------------------
 
-        prices["TimeDK"] = pd.to_datetime(
+        prices[
+            "TimeDK"
+        ] = pd.to_datetime(
             prices["TimeDK"],
             errors="coerce"
         )
 
-        factors["TimeDK"] = pd.to_datetime(
+        factors[
+            "TimeDK"
+        ] = pd.to_datetime(
             factors["TimeDK"],
             errors="coerce"
         )
@@ -51,71 +61,85 @@ class FeatureEngineer:
         )
 
         # --------------------------------------------------
-        # Convert electricity prices to hourly data
+        # Hourly electricity price
         # --------------------------------------------------
 
-        prices["Hour"] = (
-            prices["TimeDK"].dt.floor("h")
+        prices[
+            "Hour"
+        ] = (
+            prices[
+                "TimeDK"
+            ].dt.floor("h")
         )
 
         hourly_prices = (
             prices.groupby(
                 "Hour",
                 as_index=False
-            )["DayAheadPriceEUR"].mean()
+            )[
+                "DayAheadPriceEUR"
+            ]
+            .mean()
         )
 
         hourly_prices = (
             hourly_prices.rename(
                 columns={
-                    "Hour": "TimeDK"
+                    "Hour":
+                        "TimeDK"
                 }
             )
         )
 
         # --------------------------------------------------
-        # Convert factors to hourly data
+        # Ensure all factor columns exist
         # --------------------------------------------------
 
-        factors["TimeDK"] = (
+        expected_factor_columns = [
+            "WindGenerationMW",
+            "ElectricityDemandMW",
+            "TemperatureC",
+            "WeatherWindSpeedMS",
+            "CloudCoverPct",
+            "PrecipitationMM"
+        ]
+
+        for column in (
+            expected_factor_columns
+        ):
+
+            if column not in (
+                factors.columns
+            ):
+
+                factors[
+                    column
+                ] = np.nan
+
+        # --------------------------------------------------
+        # Hourly factors
+        # --------------------------------------------------
+
+        factors[
+            "TimeDK"
+        ] = (
             factors[
                 "TimeDK"
             ].dt.floor("h")
         )
 
-        factor_columns = []
-
-        if (
-            "WindGenerationMW"
-            in factors.columns
-        ):
-
-            factor_columns.append(
-                "WindGenerationMW"
-            )
-
-        if (
-            "ElectricityDemandMW"
-            in factors.columns
-        ):
-
-            factor_columns.append(
-                "ElectricityDemandMW"
-            )
-
-        if not factor_columns:
-
-            return pd.DataFrame()
-
         hourly_factors = (
             factors.groupby(
                 "TimeDK",
                 as_index=False
-            )[factor_columns].mean()
+            )[
+                expected_factor_columns
+            ]
+            .mean()
         )
 
         # --------------------------------------------------
-        # Merge price + factors
+        # Merge
         # --------------------------------------------------
 
         features = pd.merge(
@@ -129,67 +153,62 @@ class FeatureEngineer:
 
             return features
 
-        # --------------------------------------------------
-        # Make sure columns exist
-        # --------------------------------------------------
-
-        if (
-            "WindGenerationMW"
-            not in features.columns
-        ):
-
-            features[
-                "WindGenerationMW"
-            ] = np.nan
-
-        if (
-            "ElectricityDemandMW"
-            not in features.columns
-        ):
-
-            features[
-                "ElectricityDemandMW"
-            ] = np.nan
-
-        features = features.sort_values(
-            "TimeDK"
+        features = (
+            features.sort_values(
+                "TimeDK"
+            )
+            .reset_index(
+                drop=True
+            )
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # Calendar features
-        # --------------------------------------------------
+        # ==================================================
 
-        features["HourOfDay"] = (
-            features["TimeDK"].dt.hour
+        features[
+            "HourOfDay"
+        ] = (
+            features[
+                "TimeDK"
+            ].dt.hour
         )
 
-        features["DayOfWeek"] = (
+        features[
+            "DayOfWeek"
+        ] = (
             features[
                 "TimeDK"
             ].dt.dayofweek
         )
 
-        features["Month"] = (
+        features[
+            "Month"
+        ] = (
             features[
                 "TimeDK"
             ].dt.month
         )
 
-        features["IsWeekend"] = (
+        features[
+            "IsWeekend"
+        ] = (
             features[
                 "DayOfWeek"
             ] >= 5
         ).astype(int)
 
-        # --------------------------------------------------
-        # Wind / demand ratio
-        # --------------------------------------------------
+        # ==================================================
+        # Energy system features
+        # ==================================================
 
-        demand = features[
-            "ElectricityDemandMW"
-        ].replace(
-            0,
-            np.nan
+        demand = (
+            features[
+                "ElectricityDemandMW"
+            ].replace(
+                0,
+                np.nan
+            )
         )
 
         features[
@@ -201,47 +220,85 @@ class FeatureEngineer:
             / demand
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # Price lag features
-        # --------------------------------------------------
+        # ==================================================
 
-        features["PriceLag1"] = (
+        features[
+            "PriceLag1"
+        ] = (
             features[
                 "DayAheadPriceEUR"
             ].shift(1)
         )
 
-        features["PriceLag2"] = (
+        features[
+            "PriceLag2"
+        ] = (
             features[
                 "DayAheadPriceEUR"
             ].shift(2)
         )
 
-        features["PriceLag24"] = (
+        features[
+            "PriceLag24"
+        ] = (
             features[
                 "DayAheadPriceEUR"
             ].shift(24)
         )
 
-        # --------------------------------------------------
-        # Market factor lag features
-        # --------------------------------------------------
+        # ==================================================
+        # Energy factor lags
+        # ==================================================
 
-        features["WindLag1"] = (
+        features[
+            "WindLag1"
+        ] = (
             features[
                 "WindGenerationMW"
             ].shift(1)
         )
 
-        features["DemandLag1"] = (
+        features[
+            "DemandLag1"
+        ] = (
             features[
                 "ElectricityDemandMW"
             ].shift(1)
         )
 
-        # --------------------------------------------------
-        # Rolling features
-        # --------------------------------------------------
+        # ==================================================
+        # Weather lag features
+        # ==================================================
+
+        features[
+            "WeatherWindLag1"
+        ] = (
+            features[
+                "WeatherWindSpeedMS"
+            ].shift(1)
+        )
+
+        features[
+            "TemperatureLag1"
+        ] = (
+            features[
+                "TemperatureC"
+            ].shift(1)
+        )
+
+        features[
+            "CloudCoverLag1"
+        ] = (
+            features[
+                "CloudCoverPct"
+            ].shift(1)
+        )
+
+        # ==================================================
+        # Rolling price features
+        # ==================================================
 
         features[
             "PriceMovingAverage6"
@@ -273,6 +330,34 @@ class FeatureEngineer:
             ).std()
         )
 
+        # ==================================================
+        # Rolling weather features
+        # ==================================================
+
+        features[
+            "WeatherWindAverage6"
+        ] = (
+            features[
+                "WeatherWindSpeedMS"
+            ].rolling(
+                window=6
+            ).mean()
+        )
+
+        features[
+            "TemperatureAverage6"
+        ] = (
+            features[
+                "TemperatureC"
+            ].rolling(
+                window=6
+            ).mean()
+        )
+
+        # --------------------------------------------------
+        # Clean
+        # --------------------------------------------------
+
         features = features.replace(
             [
                 np.inf,
@@ -287,9 +372,9 @@ class FeatureEngineer:
 
         return features
 
-    # --------------------------------------------------
-    # Market factor statistics
-    # --------------------------------------------------
+    # ==================================================
+    # Factor statistics
+    # ==================================================
 
     def calculate_factor_statistics(
         self,
@@ -304,151 +389,195 @@ class FeatureEngineer:
             feature_dataframe.copy()
         )
 
-        price = data[
-            "DayAheadPriceEUR"
-        ]
+        statistics = {
+            "wind_price_correlation":
+                self._correlation(
+                    data,
+                    "WindGenerationMW"
+                ),
 
-        wind = data[
-            "WindGenerationMW"
-        ]
+            "demand_price_correlation":
+                self._correlation(
+                    data,
+                    "ElectricityDemandMW"
+                ),
 
-        demand = data[
+            "weather_wind_price_correlation":
+                self._correlation(
+                    data,
+                    "WeatherWindSpeedMS"
+                ),
+
+            "temperature_price_correlation":
+                self._correlation(
+                    data,
+                    "TemperatureC"
+                ),
+
+            "average_wind":
+                self._mean(
+                    data,
+                    "WindGenerationMW"
+                ),
+
+            "average_demand":
+                self._mean(
+                    data,
+                    "ElectricityDemandMW"
+                ),
+
+            "average_weather_wind":
+                self._mean(
+                    data,
+                    "WeatherWindSpeedMS"
+                ),
+
+            "average_temperature":
+                self._mean(
+                    data,
+                    "TemperatureC"
+                ),
+
+            "average_cloud_cover":
+                self._mean(
+                    data,
+                    "CloudCoverPct"
+                ),
+
+            "average_wind_ratio":
+                self._mean(
+                    data,
+                    "WindDemandRatio"
+                )
+        }
+
+        required_columns = [
+            "DayAheadPriceEUR",
+            "WindGenerationMW",
             "ElectricityDemandMW"
         ]
 
-        wind_price_data = data[
-            [
-                "DayAheadPriceEUR",
-                "WindGenerationMW"
-            ]
-        ].dropna()
-
-        demand_price_data = data[
-            [
-                "DayAheadPriceEUR",
-                "ElectricityDemandMW"
-            ]
-        ].dropna()
-
-        if len(
-            wind_price_data
-        ) >= 2:
-
-            wind_price_correlation = (
-                wind_price_data[
-                    "DayAheadPriceEUR"
-                ].corr(
-                    wind_price_data[
-                        "WindGenerationMW"
-                    ]
-                )
-            )
-
-        else:
-
-            wind_price_correlation = 0
-
-        if len(
-            demand_price_data
-        ) >= 2:
-
-            demand_price_correlation = (
-                demand_price_data[
-                    "DayAheadPriceEUR"
-                ].corr(
-                    demand_price_data[
-                        "ElectricityDemandMW"
-                    ]
-                )
-            )
-
-        else:
-
-            demand_price_correlation = 0
-
-        average_wind = (
-            wind.dropna().mean()
-        )
-
-        average_demand = (
-            demand.dropna().mean()
-        )
-
-        average_wind_ratio = (
+        statistics[
+            "observations"
+        ] = (
             data[
-                "WindDemandRatio"
-            ].dropna().mean()
-        )
-
-        if pd.isna(
-            wind_price_correlation
-        ):
-
-            wind_price_correlation = 0
-
-        if pd.isna(
-            demand_price_correlation
-        ):
-
-            demand_price_correlation = 0
-
-        if pd.isna(
-            average_wind
-        ):
-
-            average_wind = 0
-
-        if pd.isna(
-            average_demand
-        ):
-
-            average_demand = 0
-
-        if pd.isna(
-            average_wind_ratio
-        ):
-
-            average_wind_ratio = 0
-
-        matched_observations = (
-            data[
-                [
-                    "DayAheadPriceEUR",
-                    "WindGenerationMW",
-                    "ElectricityDemandMW"
-                ]
+                required_columns
             ]
             .dropna()
             .shape[0]
         )
 
-        return {
-            "wind_price_correlation":
-                wind_price_correlation,
+        weather_columns = [
+            "DayAheadPriceEUR",
+            "WeatherWindSpeedMS",
+            "TemperatureC"
+        ]
 
-            "demand_price_correlation":
-                demand_price_correlation,
+        statistics[
+            "weather_observations"
+        ] = (
+            data[
+                weather_columns
+            ]
+            .dropna()
+            .shape[0]
+        )
 
-            "average_wind":
-                average_wind,
+        return statistics
 
-            "average_demand":
-                average_demand,
+    # ==================================================
+    # Helpers
+    # ==================================================
 
-            "average_wind_ratio":
-                average_wind_ratio,
+    def _correlation(
+        self,
+        dataframe,
+        column
+    ):
 
-            "observations":
-                matched_observations
-        }
+        if column not in (
+            dataframe.columns
+        ):
 
-    def _empty_statistics(self):
+            return 0
+
+        clean_data = (
+            dataframe[
+                [
+                    "DayAheadPriceEUR",
+                    column
+                ]
+            ]
+            .dropna()
+        )
+
+        if len(
+            clean_data
+        ) < 2:
+
+            return 0
+
+        correlation = (
+            clean_data[
+                "DayAheadPriceEUR"
+            ].corr(
+                clean_data[
+                    column
+                ]
+            )
+        )
+
+        if pd.isna(
+            correlation
+        ):
+
+            return 0
+
+        return correlation
+
+    def _mean(
+        self,
+        dataframe,
+        column
+    ):
+
+        if column not in (
+            dataframe.columns
+        ):
+
+            return 0
+
+        value = (
+            dataframe[
+                column
+            ]
+            .dropna()
+            .mean()
+        )
+
+        if pd.isna(
+            value
+        ):
+
+            return 0
+
+        return value
+
+    def _empty_statistics(
+        self
+    ):
 
         return {
             "wind_price_correlation": 0,
             "demand_price_correlation": 0,
+            "weather_wind_price_correlation": 0,
+            "temperature_price_correlation": 0,
             "average_wind": 0,
             "average_demand": 0,
+            "average_weather_wind": 0,
+            "average_temperature": 0,
+            "average_cloud_cover": 0,
             "average_wind_ratio": 0,
-            "observations": 0
+            "observations": 0,
+            "weather_observations": 0
         }

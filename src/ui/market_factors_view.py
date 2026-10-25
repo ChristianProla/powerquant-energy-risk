@@ -3,6 +3,7 @@ import tkinter as tk
 import numpy as np
 
 from matplotlib.figure import Figure
+
 from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg
 )
@@ -18,6 +19,10 @@ class MarketFactorsView:
         self.feature_engineer = (
             feature_engineer
         )
+
+    # ==================================================
+    # Main view
+    # ==================================================
 
     def show(
         self,
@@ -38,8 +43,8 @@ class MarketFactorsView:
         tk.Label(
             container,
             text=(
-                "Market Factors & "
-                "Feature Engineering"
+                "Market Factors, Weather "
+                "& Feature Engineering"
             ),
             font=(
                 "Arial",
@@ -54,9 +59,9 @@ class MarketFactorsView:
         tk.Label(
             container,
             text=(
-                "Explore how wind generation "
-                "and electricity demand relate "
-                "to electricity prices."
+                "Explore electricity prices together "
+                "with wind generation, demand and "
+                "weather conditions."
             ),
             font=(
                 "Arial",
@@ -73,8 +78,7 @@ class MarketFactorsView:
                 container,
                 text=(
                     "No matching market-factor "
-                    "data was available for "
-                    "this period."
+                    "data was available."
                 ),
                 font=(
                     "Arial",
@@ -97,30 +101,74 @@ class MarketFactorsView:
             )
         )
 
-        stats_frame = tk.Frame(
+        stats_row_1 = tk.Frame(
             container
         )
 
-        stats_frame.pack(
+        stats_row_1.pack(
             fill="x",
-            pady=(0, 10)
+            pady=(0, 5)
         )
 
-        stats = [
+        row_1_values = [
             (
-                "Wind / Price Correlation",
+                "Generation Wind / Price",
                 (
                     f"{statistics['wind_price_correlation']:.3f}"
                 )
             ),
             (
-                "Demand / Price Correlation",
+                "Demand / Price",
                 (
                     f"{statistics['demand_price_correlation']:.3f}"
                 )
             ),
             (
-                "Average Wind",
+                "Weather Wind / Price",
+                (
+                    f"{statistics['weather_wind_price_correlation']:.3f}"
+                )
+            ),
+            (
+                "Temperature / Price",
+                (
+                    f"{statistics['temperature_price_correlation']:.3f}"
+                )
+            )
+        ]
+
+        for name, value in (
+            row_1_values
+        ):
+
+            tk.Label(
+                stats_row_1,
+                text=(
+                    f"{name}\n"
+                    f"{value}"
+                ),
+                font=(
+                    "Arial",
+                    9,
+                    "bold"
+                ),
+                padx=12
+            ).pack(
+                side="left"
+            )
+
+        stats_row_2 = tk.Frame(
+            container
+        )
+
+        stats_row_2.pack(
+            fill="x",
+            pady=(0, 8)
+        )
+
+        row_2_values = [
+            (
+                "Average Generation Wind",
                 (
                     f"{statistics['average_wind']:.0f} MW"
                 )
@@ -132,36 +180,62 @@ class MarketFactorsView:
                 )
             ),
             (
-                "Wind / Demand",
+                "Average Weather Wind",
                 (
-                    f"{statistics['average_wind_ratio'] * 100:.1f}%"
+                    f"{statistics['average_weather_wind']:.1f} m/s"
                 )
             ),
             (
-                "Matched Hours",
+                "Average Temperature",
                 (
-                    f"{statistics['observations']:,}"
+                    f"{statistics['average_temperature']:.1f} °C"
+                )
+            ),
+            (
+                "Weather Hours",
+                (
+                    f"{statistics['weather_observations']:,}"
                 )
             )
         ]
 
-        for name, value in stats:
+        for name, value in (
+            row_2_values
+        ):
 
             tk.Label(
-                stats_frame,
+                stats_row_2,
                 text=(
                     f"{name}\n"
                     f"{value}"
                 ),
                 font=(
                     "Arial",
-                    9,
-                    "bold"
+                    9
                 ),
                 padx=10
             ).pack(
                 side="left"
             )
+
+        # --------------------------------------------------
+        # Explanation
+        # --------------------------------------------------
+
+        tk.Label(
+            container,
+            text=(
+                "Weather is represented by a geographic proxy: "
+                "Aarhus for DK1 and Copenhagen for DK2."
+            ),
+            font=(
+                "Arial",
+                9
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 5)
+        )
 
         # --------------------------------------------------
         # Chart
@@ -187,9 +261,9 @@ class MarketFactorsView:
             expand=True
         )
 
-    # --------------------------------------------------
+    # ==================================================
     # Chart
-    # --------------------------------------------------
+    # ==================================================
 
     def _create_chart(
         self,
@@ -199,7 +273,7 @@ class MarketFactorsView:
     ):
 
         figure = Figure(
-            figsize=(10, 5),
+            figsize=(10, 4.5),
             dpi=100
         )
 
@@ -211,7 +285,75 @@ class MarketFactorsView:
             feature_data.copy()
         )
 
-        if data.empty:
+        series = [
+            (
+                "DayAheadPriceEUR",
+                "Electricity Price"
+            ),
+            (
+                "WindGenerationMW",
+                "Wind Generation"
+            ),
+            (
+                "ElectricityDemandMW",
+                "Electricity Demand"
+            ),
+            (
+                "WeatherWindSpeedMS",
+                "Weather Wind Speed"
+            ),
+            (
+                "TemperatureC",
+                "Temperature"
+            )
+        ]
+
+        plotted = False
+
+        for (
+            column,
+            label
+        ) in series:
+
+            if column not in (
+                data.columns
+            ):
+
+                continue
+
+            clean_data = (
+                data[
+                    [
+                        "TimeDK",
+                        column
+                    ]
+                ]
+                .dropna()
+            )
+
+            if clean_data.empty:
+
+                continue
+
+            standardized = (
+                self._standardize(
+                    clean_data[
+                        column
+                    ]
+                )
+            )
+
+            axis.plot(
+                clean_data[
+                    "TimeDK"
+                ],
+                standardized,
+                label=label
+            )
+
+            plotted = True
+
+        if not plotted:
 
             axis.text(
                 0.5,
@@ -224,93 +366,21 @@ class MarketFactorsView:
 
             return figure
 
-        # --------------------------------------------------
-        # Price
-        # --------------------------------------------------
-
-        price_data = data.dropna(
-            subset=[
-                "DayAheadPriceEUR"
-            ]
-        )
-
-        if not price_data.empty:
-
-            axis.plot(
-                price_data[
-                    "TimeDK"
-                ],
-                self._normalise(
-                    price_data[
-                        "DayAheadPriceEUR"
-                    ]
-                ),
-                label="Electricity Price"
-            )
-
-        # --------------------------------------------------
-        # Wind
-        # --------------------------------------------------
-
-        wind_data = data.dropna(
-            subset=[
-                "WindGenerationMW"
-            ]
-        )
-
-        if not wind_data.empty:
-
-            axis.plot(
-                wind_data[
-                    "TimeDK"
-                ],
-                self._normalise(
-                    wind_data[
-                        "WindGenerationMW"
-                    ]
-                ),
-                label="Wind Generation"
-            )
-
-        # --------------------------------------------------
-        # Demand
-        # --------------------------------------------------
-
-        demand_data = data.dropna(
-            subset=[
-                "ElectricityDemandMW"
-            ]
-        )
-
-        if not demand_data.empty:
-
-            axis.plot(
-                demand_data[
-                    "TimeDK"
-                ],
-                self._normalise(
-                    demand_data[
-                        "ElectricityDemandMW"
-                    ]
-                ),
-                label="Electricity Demand"
-            )
-
         axis.axhline(
-            y=100,
+            y=0,
             linewidth=1,
             alpha=0.5
         )
 
         axis.set_title(
             (
-                f"{price_area} Market Factors "
+                f"{price_area} Market & Weather Factors "
                 f"- {time_range}"
             )
         )
 
         axis.set_ylabel(
-            "Normalised Index"
+            "Standardized Value (z-score)"
         )
 
         axis.set_xlabel(
@@ -322,7 +392,9 @@ class MarketFactorsView:
             alpha=0.3
         )
 
-        axis.legend()
+        axis.legend(
+            fontsize=8
+        )
 
         figure.autofmt_xdate(
             rotation=45
@@ -332,37 +404,52 @@ class MarketFactorsView:
 
         return figure
 
-    # --------------------------------------------------
-    # Normalise series
-    # --------------------------------------------------
+    # ==================================================
+    # Standardization
+    # ==================================================
 
-    def _normalise(
+    def _standardize(
         self,
         series
     ):
 
-        values = series.astype(
-            float
+        values = (
+            series.astype(
+                float
+            )
         )
 
-        mean = values.mean()
+        mean = (
+            values.mean()
+        )
+
+        standard_deviation = (
+            values.std()
+        )
 
         if (
-            mean == 0
+            np.isnan(
+                standard_deviation
+            )
             or
-            np.isnan(mean)
+            standard_deviation == 0
         ):
 
-            return values * 0
+            return (
+                values * 0
+            )
 
         return (
-            values
-            / abs(mean)
-        ) * 100
+            (
+                values
+                - mean
+            )
+            / standard_deviation
+        )
 
-    # --------------------------------------------------
+    # ==================================================
     # Clear frame
-    # --------------------------------------------------
+    # ==================================================
 
     def _clear_frame(
         self,
