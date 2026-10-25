@@ -73,8 +73,10 @@ class ChartBuilder:
 
             locator = mdates.AutoDateLocator()
 
-            formatter = mdates.ConciseDateFormatter(
-                locator
+            formatter = (
+                mdates.ConciseDateFormatter(
+                    locator
+                )
             )
 
             axis.set_xlabel("Time")
@@ -384,7 +386,9 @@ class ChartBuilder:
             alpha=0.6
         )
 
-        if len(correlation_data) >= 2:
+        if len(
+            correlation_data
+        ) >= 2:
 
             x_values = correlation_data[
                 "DK1Return"
@@ -472,11 +476,15 @@ class ChartBuilder:
 
         axis = figure.add_subplot(111)
 
-        dk2_weight = 1 - dk1_weight
+        dk2_weight = (
+            1 - dk1_weight
+        )
 
         axis.plot(
             portfolio_data["TimeDK"],
-            portfolio_data["CumulativePortfolioReturn"],
+            portfolio_data[
+                "CumulativePortfolioReturn"
+            ],
             label="Portfolio"
         )
 
@@ -682,7 +690,9 @@ class ChartBuilder:
 
         periods = np.arange(
             1,
-            simulation_results["horizon"] + 1
+            simulation_results[
+                "horizon"
+            ] + 1
         )
 
         for path_number in range(
@@ -733,6 +743,71 @@ class ChartBuilder:
         )
 
         axis.legend()
+
+        figure.tight_layout()
+
+        return figure
+
+    # --------------------------------------------------
+    # Stress Test
+    # --------------------------------------------------
+
+    def create_stress_test_chart(
+        self,
+        stress_results,
+        price_area,
+        time_range
+    ):
+
+        figure = Figure(
+            figsize=(10, 5),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(111)
+
+        labels = [
+            "Baseline Return",
+            "Stressed Return"
+        ]
+
+        values = [
+            stress_results[
+                "baseline_mean"
+            ],
+            stress_results[
+                "stressed_return"
+            ]
+        ]
+
+        axis.bar(
+            labels,
+            values
+        )
+
+        axis.axhline(
+            y=0,
+            linewidth=1,
+            alpha=0.6
+        )
+
+        axis.set_title(
+            (
+                f"{price_area} Stress Test - "
+                f"{stress_results['scenario']} - "
+                f"{time_range}"
+            )
+        )
+
+        axis.set_ylabel(
+            "Return (%)"
+        )
+
+        axis.grid(
+            True,
+            axis="y",
+            alpha=0.3
+        )
 
         figure.tight_layout()
 

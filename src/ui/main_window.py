@@ -16,6 +16,7 @@ from src.portfolio.optimization import PortfolioOptimizer
 from src.risk.value_at_risk import ValueAtRiskAnalyzer
 from src.risk.expected_shortfall import ExpectedShortfallAnalyzer
 from src.risk.monte_carlo import MonteCarloSimulator
+from src.risk.stress_testing import StressTester
 from src.visualization.charts import ChartBuilder
 
 
@@ -29,26 +30,54 @@ class PowerQuantApp(tk.Tk):
         self.minsize(1000, 650)
 
         self.api = ElectricityAPI()
+
         self.chart_builder = ChartBuilder()
+
         self.resampler = MarketDataResampler()
+
         self.return_calculator = ReturnCalculator()
+
         self.statistics_analyzer = StatisticsAnalyzer()
+
         self.volatility_analyzer = VolatilityAnalyzer()
+
         self.correlation_analyzer = CorrelationAnalyzer()
+
         self.portfolio_analyzer = PortfolioAnalyzer()
+
         self.portfolio_optimizer = PortfolioOptimizer()
+
         self.var_analyzer = ValueAtRiskAnalyzer()
+
         self.es_analyzer = ExpectedShortfallAnalyzer()
+
         self.monte_carlo_simulator = MonteCarloSimulator()
+
+        self.stress_tester = StressTester()
 
         self.selected_range = "1D"
 
         self.time_ranges = {
-            "1H": ("now-PT1H", "1 Hour"),
-            "1D": ("now-P1D", "1 Day"),
-            "1W": ("now-P7D", "1 Week"),
-            "1M": ("now-P1M", "1 Month"),
-            "1Y": ("now-P1Y", "1 Year")
+            "1H": (
+                "now-PT1H",
+                "1 Hour"
+            ),
+            "1D": (
+                "now-P1D",
+                "1 Day"
+            ),
+            "1W": (
+                "now-P7D",
+                "1 Week"
+            ),
+            "1M": (
+                "now-P1M",
+                "1 Month"
+            ),
+            "1Y": (
+                "now-P1Y",
+                "1 Year"
+            )
         }
 
         self.show_home_page()
@@ -60,6 +89,7 @@ class PowerQuantApp(tk.Tk):
     def clear_window(self):
 
         for widget in self.winfo_children():
+
             widget.destroy()
 
     def clear_frame(
@@ -68,6 +98,7 @@ class PowerQuantApp(tk.Tk):
     ):
 
         for widget in frame.winfo_children():
+
             widget.destroy()
 
     def embed_chart(
@@ -107,14 +138,28 @@ class PowerQuantApp(tk.Tk):
         tk.Label(
             header,
             text="PowerQuant",
-            font=("Arial", 30, "bold")
-        ).pack(anchor="w")
+            font=(
+                "Arial",
+                30,
+                "bold"
+            )
+        ).pack(
+            anchor="w"
+        )
 
         tk.Label(
             header,
-            text="Electricity Market Analytics & Risk Platform",
-            font=("Arial", 14)
-        ).pack(anchor="w")
+            text=(
+                "Electricity Market Analytics "
+                "& Risk Platform"
+            ),
+            font=(
+                "Arial",
+                14
+            )
+        ).pack(
+            anchor="w"
+        )
 
         content = tk.Frame(self)
 
@@ -128,17 +173,28 @@ class PowerQuantApp(tk.Tk):
         tk.Label(
             content,
             text="Market",
-            font=("Arial", 15, "bold")
-        ).pack(anchor="w")
+            font=(
+                "Arial",
+                15,
+                "bold"
+            )
+        ).pack(
+            anchor="w"
+        )
 
         self.market_selector = ttk.Combobox(
             content,
-            values=["DK1", "DK2"],
+            values=[
+                "DK1",
+                "DK2"
+            ],
             state="readonly",
             width=15
         )
 
-        self.market_selector.set("DK1")
+        self.market_selector.set(
+            "DK1"
+        )
 
         self.market_selector.pack(
             anchor="w",
@@ -148,10 +204,18 @@ class PowerQuantApp(tk.Tk):
         tk.Label(
             content,
             text="Time Range",
-            font=("Arial", 15, "bold")
-        ).pack(anchor="w")
+            font=(
+                "Arial",
+                15,
+                "bold"
+            )
+        ).pack(
+            anchor="w"
+        )
 
-        range_frame = tk.Frame(content)
+        range_frame = tk.Frame(
+            content
+        )
 
         range_frame.pack(
             anchor="w",
@@ -171,7 +235,9 @@ class PowerQuantApp(tk.Tk):
                 text=time_range,
                 width=7,
                 command=lambda value=time_range:
-                self.select_range(value)
+                self.select_range(
+                    value
+                )
             ).pack(
                 side="left",
                 padx=(0, 8)
@@ -180,7 +246,10 @@ class PowerQuantApp(tk.Tk):
         self.range_label = tk.Label(
             content,
             text="Selected: 1 Day",
-            font=("Arial", 11)
+            font=(
+                "Arial",
+                11
+            )
         )
 
         self.range_label.pack(
@@ -191,16 +260,25 @@ class PowerQuantApp(tk.Tk):
         tk.Button(
             content,
             text="Open Market Analysis",
-            font=("Arial", 13, "bold"),
+            font=(
+                "Arial",
+                13,
+                "bold"
+            ),
             padx=15,
             pady=8,
             command=self.load_market_data
-        ).pack(anchor="w")
+        ).pack(
+            anchor="w"
+        )
 
         self.status_label = tk.Label(
             content,
             text="Ready",
-            font=("Arial", 11)
+            font=(
+                "Arial",
+                11
+            )
         )
 
         self.status_label.pack(
@@ -208,36 +286,53 @@ class PowerQuantApp(tk.Tk):
             pady=(20, 0)
         )
 
+    # --------------------------------------------------
+    # Time range
+    # --------------------------------------------------
+
     def select_range(
         self,
         time_range
     ):
 
-        self.selected_range = time_range
-
-        readable_name = self.time_ranges[
+        self.selected_range = (
             time_range
-        ][1]
+        )
+
+        readable_name = (
+            self.time_ranges[
+                time_range
+            ][1]
+        )
 
         self.range_label.config(
-            text=f"Selected: {readable_name}"
+            text=(
+                f"Selected: "
+                f"{readable_name}"
+            )
         )
 
     # --------------------------------------------------
-    # Load market data
+    # Load data
     # --------------------------------------------------
 
     def load_market_data(self):
 
-        price_area = self.market_selector.get()
+        price_area = (
+            self.market_selector.get()
+        )
 
-        start_date = self.time_ranges[
-            self.selected_range
-        ][0]
+        start_date = (
+            self.time_ranges[
+                self.selected_range
+            ][0]
+        )
 
-        readable_range = self.time_ranges[
-            self.selected_range
-        ][1]
+        readable_range = (
+            self.time_ranges[
+                self.selected_range
+            ][1]
+        )
 
         self.status_label.config(
             text="Loading market data..."
@@ -247,17 +342,22 @@ class PowerQuantApp(tk.Tk):
 
         try:
 
-            prices = self.api.get_prices(
-                price_area=price_area,
-                start_date=start_date,
-                end_date="now"
+            prices = (
+                self.api.get_prices(
+                    price_area=price_area,
+                    start_date=start_date,
+                    end_date="now"
+                )
             )
 
             if prices.empty:
 
                 messagebox.showwarning(
                     "No Data",
-                    "No market data was returned."
+                    (
+                        "No market data "
+                        "was returned."
+                    )
                 )
 
                 return
@@ -281,24 +381,32 @@ class PowerQuantApp(tk.Tk):
                 )
             )
 
+            # -----------------------------------------
+            # DK1 + DK2
+            # -----------------------------------------
+
             if price_area == "DK1":
 
                 dk1_prices = prices
 
-                dk2_prices = self.api.get_prices(
-                    price_area="DK2",
-                    start_date=start_date,
-                    end_date="now"
+                dk2_prices = (
+                    self.api.get_prices(
+                        price_area="DK2",
+                        start_date=start_date,
+                        end_date="now"
+                    )
                 )
 
             else:
 
                 dk2_prices = prices
 
-                dk1_prices = self.api.get_prices(
-                    price_area="DK1",
-                    start_date=start_date,
-                    end_date="now"
+                dk1_prices = (
+                    self.api.get_prices(
+                        price_area="DK1",
+                        start_date=start_date,
+                        end_date="now"
+                    )
                 )
 
             dk1_chart_data, _ = (
@@ -377,7 +485,9 @@ class PowerQuantApp(tk.Tk):
 
         self.clear_window()
 
-        navigation = tk.Frame(self)
+        navigation = tk.Frame(
+            self
+        )
 
         navigation.pack(
             fill="x",
@@ -389,18 +499,29 @@ class PowerQuantApp(tk.Tk):
             navigation,
             text="← Back",
             command=self.show_home_page
-        ).pack(side="left")
+        ).pack(
+            side="left"
+        )
 
         tk.Label(
             navigation,
-            text=f"{price_area} Market Analysis",
-            font=("Arial", 22, "bold")
+            text=(
+                f"{price_area} "
+                f"Market Analysis"
+            ),
+            font=(
+                "Arial",
+                22,
+                "bold"
+            )
         ).pack(
             side="left",
             padx=20
         )
 
-        content = tk.Frame(self)
+        content = tk.Frame(
+            self
+        )
 
         content.pack(
             fill="both",
@@ -409,7 +530,13 @@ class PowerQuantApp(tk.Tk):
             pady=20
         )
 
-        info_frame = tk.Frame(content)
+        # -----------------------------------------
+        # Market information
+        # -----------------------------------------
+
+        info_frame = tk.Frame(
+            content
+        )
 
         info_frame.pack(
             fill="x",
@@ -421,11 +548,20 @@ class PowerQuantApp(tk.Tk):
         ].iloc[-1]
 
         information = [
-            ("Market", price_area),
-            ("Time Range", time_range),
+            (
+                "Market",
+                price_area
+            ),
+            (
+                "Time Range",
+                time_range
+            ),
             (
                 "Latest Price",
-                f"{latest_price:.2f} EUR/MWh"
+                (
+                    f"{latest_price:.2f} "
+                    f"EUR/MWh"
+                )
             ),
             (
                 "Data Points",
@@ -441,13 +577,28 @@ class PowerQuantApp(tk.Tk):
 
             tk.Label(
                 info_frame,
-                text=f"{name}\n{value}",
-                font=("Arial", 12, "bold"),
+                text=(
+                    f"{name}\n"
+                    f"{value}"
+                ),
+                font=(
+                    "Arial",
+                    12,
+                    "bold"
+                ),
                 padx=20
-            ).pack(side="left")
+            ).pack(
+                side="left"
+            )
 
-        analysis_navigation = tk.Frame(
-            content
+        # -----------------------------------------
+        # Analysis navigation
+        # -----------------------------------------
+
+        analysis_navigation = (
+            tk.Frame(
+                content
+            )
         )
 
         analysis_navigation.pack(
@@ -455,8 +606,10 @@ class PowerQuantApp(tk.Tk):
             pady=(5, 10)
         )
 
-        analysis_content = tk.Frame(
-            content
+        analysis_content = (
+            tk.Frame(
+                content
+            )
         )
 
         analysis_content.pack(
@@ -543,6 +696,16 @@ class PowerQuantApp(tk.Tk):
                     price_area,
                     time_range
                 )
+            ),
+            (
+                "Stress Test",
+                lambda:
+                self.show_stress_test_view(
+                    analysis_content,
+                    returns_data,
+                    price_area,
+                    time_range
+                )
             )
         ]
 
@@ -578,7 +741,9 @@ class PowerQuantApp(tk.Tk):
         resolution
     ):
 
-        self.clear_frame(container)
+        self.clear_frame(
+            container
+        )
 
         figure = (
             self.chart_builder.create_price_chart(
@@ -606,7 +771,9 @@ class PowerQuantApp(tk.Tk):
         time_range
     ):
 
-        self.clear_frame(container)
+        self.clear_frame(
+            container
+        )
 
         statistics = (
             self.return_calculator.get_return_statistics(
@@ -614,22 +781,32 @@ class PowerQuantApp(tk.Tk):
             )
         )
 
-        stats_frame = tk.Frame(container)
+        stats_frame = tk.Frame(
+            container
+        )
 
-        stats_frame.pack(fill="x")
+        stats_frame.pack(
+            fill="x"
+        )
 
         values = [
             (
                 "Mean Return",
-                statistics["mean"]
+                statistics[
+                    "mean"
+                ]
             ),
             (
                 "Minimum Return",
-                statistics["minimum"]
+                statistics[
+                    "minimum"
+                ]
             ),
             (
                 "Maximum Return",
-                statistics["maximum"]
+                statistics[
+                    "maximum"
+                ]
             )
         ]
 
@@ -637,10 +814,19 @@ class PowerQuantApp(tk.Tk):
 
             tk.Label(
                 stats_frame,
-                text=f"{name}\n{value:.2f}%",
-                font=("Arial", 11, "bold"),
+                text=(
+                    f"{name}\n"
+                    f"{value:.2f}%"
+                ),
+                font=(
+                    "Arial",
+                    11,
+                    "bold"
+                ),
                 padx=25
-            ).pack(side="left")
+            ).pack(
+                side="left"
+            )
 
         figure = (
             self.chart_builder.create_returns_chart(
@@ -667,7 +853,9 @@ class PowerQuantApp(tk.Tk):
         time_range
     ):
 
-        self.clear_frame(container)
+        self.clear_frame(
+            container
+        )
 
         statistics = (
             self.statistics_analyzer.calculate_statistics(
@@ -675,27 +863,65 @@ class PowerQuantApp(tk.Tk):
             )
         )
 
-        stats_frame = tk.Frame(container)
+        stats_frame = tk.Frame(
+            container
+        )
 
-        stats_frame.pack(fill="x")
+        stats_frame.pack(
+            fill="x"
+        )
 
         stats = [
-            ("Mean", statistics["mean"], "%"),
-            ("Std. Deviation", statistics["std"], "%"),
-            ("Minimum", statistics["minimum"], "%"),
-            ("Maximum", statistics["maximum"], "%"),
-            ("Skewness", statistics["skewness"], ""),
-            ("Kurtosis", statistics["kurtosis"], "")
+            (
+                "Mean",
+                statistics["mean"],
+                "%"
+            ),
+            (
+                "Std. Deviation",
+                statistics["std"],
+                "%"
+            ),
+            (
+                "Minimum",
+                statistics["minimum"],
+                "%"
+            ),
+            (
+                "Maximum",
+                statistics["maximum"],
+                "%"
+            ),
+            (
+                "Skewness",
+                statistics["skewness"],
+                ""
+            ),
+            (
+                "Kurtosis",
+                statistics["kurtosis"],
+                ""
+            )
         ]
 
         for name, value, suffix in stats:
 
             tk.Label(
                 stats_frame,
-                text=f"{name}\n{value:.2f}{suffix}",
-                font=("Arial", 11, "bold"),
+                text=(
+                    f"{name}\n"
+                    f"{value:.2f}"
+                    f"{suffix}"
+                ),
+                font=(
+                    "Arial",
+                    11,
+                    "bold"
+                ),
                 padx=15
-            ).pack(side="left")
+            ).pack(
+                side="left"
+            )
 
         figure = (
             self.chart_builder.create_distribution_chart(
@@ -722,7 +948,9 @@ class PowerQuantApp(tk.Tk):
         time_range
     ):
 
-        self.clear_frame(container)
+        self.clear_frame(
+            container
+        )
 
         statistics = (
             self.volatility_analyzer.get_volatility_statistics(
@@ -730,26 +958,38 @@ class PowerQuantApp(tk.Tk):
             )
         )
 
-        stats_frame = tk.Frame(container)
+        stats_frame = tk.Frame(
+            container
+        )
 
-        stats_frame.pack(fill="x")
+        stats_frame.pack(
+            fill="x"
+        )
 
         values = [
             (
                 "Current 7-Period",
-                statistics["current_7"]
+                statistics[
+                    "current_7"
+                ]
             ),
             (
                 "Current 30-Period",
-                statistics["current_30"]
+                statistics[
+                    "current_30"
+                ]
             ),
             (
                 "Average 30-Period",
-                statistics["average_30"]
+                statistics[
+                    "average_30"
+                ]
             ),
             (
                 "Maximum 30-Period",
-                statistics["maximum_30"]
+                statistics[
+                    "maximum_30"
+                ]
             )
         ]
 
@@ -757,10 +997,19 @@ class PowerQuantApp(tk.Tk):
 
             tk.Label(
                 stats_frame,
-                text=f"{name}\n{value:.2f}%",
-                font=("Arial", 11, "bold"),
+                text=(
+                    f"{name}\n"
+                    f"{value:.2f}%"
+                ),
+                font=(
+                    "Arial",
+                    11,
+                    "bold"
+                ),
                 padx=20
-            ).pack(side="left")
+            ).pack(
+                side="left"
+            )
 
         figure = (
             self.chart_builder.create_volatility_chart(
@@ -786,7 +1035,9 @@ class PowerQuantApp(tk.Tk):
         time_range
     ):
 
-        self.clear_frame(container)
+        self.clear_frame(
+            container
+        )
 
         statistics = (
             self.correlation_analyzer.calculate_correlation(
@@ -794,22 +1045,32 @@ class PowerQuantApp(tk.Tk):
             )
         )
 
-        info_frame = tk.Frame(container)
+        info_frame = tk.Frame(
+            container
+        )
 
-        info_frame.pack(fill="x")
+        info_frame.pack(
+            fill="x"
+        )
 
         values = [
             (
                 "Pearson Correlation",
-                f"{statistics['correlation']:.3f}"
+                (
+                    f"{statistics['correlation']:.3f}"
+                )
             ),
             (
                 "Relationship",
-                statistics["strength"]
+                statistics[
+                    "strength"
+                ]
             ),
             (
                 "Matched Observations",
-                f"{statistics['observations']:,}"
+                (
+                    f"{statistics['observations']:,}"
+                )
             )
         ]
 
@@ -817,10 +1078,19 @@ class PowerQuantApp(tk.Tk):
 
             tk.Label(
                 info_frame,
-                text=f"{name}\n{value}",
-                font=("Arial", 11, "bold"),
+                text=(
+                    f"{name}\n"
+                    f"{value}"
+                ),
+                font=(
+                    "Arial",
+                    11,
+                    "bold"
+                ),
                 padx=25
-            ).pack(side="left")
+            ).pack(
+                side="left"
+            )
 
         figure = (
             self.chart_builder.create_correlation_chart(
@@ -845,12 +1115,18 @@ class PowerQuantApp(tk.Tk):
         time_range
     ):
 
-        self.clear_frame(container)
+        self.clear_frame(
+            container
+        )
 
         tk.Label(
             container,
             text="Portfolio Construction",
-            font=("Arial", 15, "bold")
+            font=(
+                "Arial",
+                15,
+                "bold"
+            )
         ).pack(
             anchor="w",
             pady=(5, 5)
@@ -860,29 +1136,39 @@ class PowerQuantApp(tk.Tk):
             container,
             text=(
                 "Adjust the DK1 portfolio weight manually, "
-                "or let PowerQuant find the minimum-volatility portfolio."
+                "or let PowerQuant find the "
+                "minimum-volatility portfolio."
             ),
-            font=("Arial", 10)
+            font=(
+                "Arial",
+                10
+            )
         ).pack(
             anchor="w",
             pady=(0, 10)
         )
 
-        controls = tk.Frame(container)
+        controls = tk.Frame(
+            container
+        )
 
         controls.pack(
             fill="x",
             pady=(0, 10)
         )
 
-        weight_variable = tk.DoubleVar(
-            value=50
+        weight_variable = (
+            tk.DoubleVar(
+                value=50
+            )
         )
 
         tk.Label(
             controls,
             text="DK1 Weight"
-        ).pack(side="left")
+        ).pack(
+            side="left"
+        )
 
         tk.Scale(
             controls,
@@ -896,7 +1182,9 @@ class PowerQuantApp(tk.Tk):
             padx=10
         )
 
-        output_frame = tk.Frame(container)
+        output_frame = tk.Frame(
+            container
+        )
 
         output_frame.pack(
             fill="both",
@@ -937,23 +1225,33 @@ class PowerQuantApp(tk.Tk):
             stats = [
                 (
                     "DK1 Weight",
-                    f"{statistics['dk1_weight'] * 100:.1f}%"
+                    (
+                        f"{statistics['dk1_weight'] * 100:.1f}%"
+                    )
                 ),
                 (
                     "DK2 Weight",
-                    f"{statistics['dk2_weight'] * 100:.1f}%"
+                    (
+                        f"{statistics['dk2_weight'] * 100:.1f}%"
+                    )
                 ),
                 (
                     "Mean Portfolio Return",
-                    f"{statistics['mean_return']:.2f}%"
+                    (
+                        f"{statistics['mean_return']:.2f}%"
+                    )
                 ),
                 (
                     "Portfolio Volatility",
-                    f"{statistics['volatility']:.2f}%"
+                    (
+                        f"{statistics['volatility']:.2f}%"
+                    )
                 ),
                 (
                     "Diversification Benefit",
-                    f"{statistics['diversification_benefit']:.2f}%"
+                    (
+                        f"{statistics['diversification_benefit']:.2f}%"
+                    )
                 )
             ]
 
@@ -961,10 +1259,19 @@ class PowerQuantApp(tk.Tk):
 
                 tk.Label(
                     stats_frame,
-                    text=f"{name}\n{value}",
-                    font=("Arial", 10, "bold"),
+                    text=(
+                        f"{name}\n"
+                        f"{value}"
+                    ),
+                    font=(
+                        "Arial",
+                        10,
+                        "bold"
+                    ),
                     padx=15
-                ).pack(side="left")
+                ).pack(
+                    side="left"
+                )
 
             figure = (
                 self.chart_builder.create_portfolio_chart(
@@ -999,7 +1306,9 @@ class PowerQuantApp(tk.Tk):
             )
 
             optimal_weight = (
-                optimal["dk1_weight"]
+                optimal[
+                    "dk1_weight"
+                ]
             )
 
             weight_variable.set(
@@ -1037,7 +1346,11 @@ class PowerQuantApp(tk.Tk):
         tk.Button(
             controls,
             text="Find Minimum Volatility",
-            font=("Arial", 10, "bold"),
+            font=(
+                "Arial",
+                10,
+                "bold"
+            ),
             command=optimize_portfolio
         ).pack(
             side="left",
@@ -1060,12 +1373,18 @@ class PowerQuantApp(tk.Tk):
         time_range
     ):
 
-        self.clear_frame(container)
+        self.clear_frame(
+            container
+        )
 
         tk.Label(
             container,
             text="Historical Risk Analysis",
-            font=("Arial", 15, "bold")
+            font=(
+                "Arial",
+                15,
+                "bold"
+            )
         ).pack(
             anchor="w",
             pady=(5, 5)
@@ -1083,7 +1402,9 @@ class PowerQuantApp(tk.Tk):
             )
         )
 
-        stats_frame = tk.Frame(container)
+        stats_frame = tk.Frame(
+            container
+        )
 
         stats_frame.pack(
             fill="x",
@@ -1093,27 +1414,39 @@ class PowerQuantApp(tk.Tk):
         stats = [
             (
                 "95% VaR",
-                f"{var_statistics['var_95']:.2f}%"
+                (
+                    f"{var_statistics['var_95']:.2f}%"
+                )
             ),
             (
                 "99% VaR",
-                f"{var_statistics['var_99']:.2f}%"
+                (
+                    f"{var_statistics['var_99']:.2f}%"
+                )
             ),
             (
                 "95% Expected Shortfall",
-                f"{es_statistics['es_95']:.2f}%"
+                (
+                    f"{es_statistics['es_95']:.2f}%"
+                )
             ),
             (
                 "99% Expected Shortfall",
-                f"{es_statistics['es_99']:.2f}%"
+                (
+                    f"{es_statistics['es_99']:.2f}%"
+                )
             ),
             (
                 "Worst Return",
-                f"{var_statistics['worst_return']:.2f}%"
+                (
+                    f"{var_statistics['worst_return']:.2f}%"
+                )
             ),
             (
                 "Average Loss",
-                f"{var_statistics['average_loss']:.2f}%"
+                (
+                    f"{var_statistics['average_loss']:.2f}%"
+                )
             )
         ]
 
@@ -1121,10 +1454,19 @@ class PowerQuantApp(tk.Tk):
 
             tk.Label(
                 stats_frame,
-                text=f"{name}\n{value}",
-                font=("Arial", 10, "bold"),
+                text=(
+                    f"{name}\n"
+                    f"{value}"
+                ),
+                font=(
+                    "Arial",
+                    10,
+                    "bold"
+                ),
                 padx=14
-            ).pack(side="left")
+            ).pack(
+                side="left"
+            )
 
         figure = (
             self.chart_builder.create_risk_chart(
@@ -1153,12 +1495,18 @@ class PowerQuantApp(tk.Tk):
         time_range
     ):
 
-        self.clear_frame(container)
+        self.clear_frame(
+            container
+        )
 
         tk.Label(
             container,
             text="Monte Carlo Simulation",
-            font=("Arial", 15, "bold")
+            font=(
+                "Arial",
+                15,
+                "bold"
+            )
         ).pack(
             anchor="w",
             pady=(5, 5)
@@ -1167,16 +1515,22 @@ class PowerQuantApp(tk.Tk):
         tk.Label(
             container,
             text=(
-                "Simulate possible future return paths using "
-                "historical mean return and volatility."
+                "Simulate possible future return paths "
+                "using historical mean return "
+                "and volatility."
             ),
-            font=("Arial", 10)
+            font=(
+                "Arial",
+                10
+            )
         ).pack(
             anchor="w",
             pady=(0, 10)
         )
 
-        controls = tk.Frame(container)
+        controls = tk.Frame(
+            container
+        )
 
         controls.pack(
             fill="x",
@@ -1186,13 +1540,17 @@ class PowerQuantApp(tk.Tk):
         tk.Label(
             controls,
             text="Simulations:"
-        ).pack(side="left")
-
-        simulations_variable = tk.StringVar(
-            value="10000"
+        ).pack(
+            side="left"
         )
 
-        simulations_box = ttk.Combobox(
+        simulations_variable = (
+            tk.StringVar(
+                value="10000"
+            )
+        )
+
+        ttk.Combobox(
             controls,
             textvariable=simulations_variable,
             values=[
@@ -1203,9 +1561,7 @@ class PowerQuantApp(tk.Tk):
             ],
             state="readonly",
             width=8
-        )
-
-        simulations_box.pack(
+        ).pack(
             side="left",
             padx=(5, 20)
         )
@@ -1213,13 +1569,17 @@ class PowerQuantApp(tk.Tk):
         tk.Label(
             controls,
             text="Forecast Horizon:"
-        ).pack(side="left")
-
-        horizon_variable = tk.StringVar(
-            value="30"
+        ).pack(
+            side="left"
         )
 
-        horizon_box = ttk.Combobox(
+        horizon_variable = (
+            tk.StringVar(
+                value="30"
+            )
+        )
+
+        ttk.Combobox(
             controls,
             textvariable=horizon_variable,
             values=[
@@ -1230,9 +1590,7 @@ class PowerQuantApp(tk.Tk):
             ],
             state="readonly",
             width=8
-        )
-
-        horizon_box.pack(
+        ).pack(
             side="left",
             padx=(5, 20)
         )
@@ -1280,23 +1638,33 @@ class PowerQuantApp(tk.Tk):
             stats = [
                 (
                     "Expected Ending Return",
-                    f"{results['expected_return']:.2f}%"
+                    (
+                        f"{results['expected_return']:.2f}%"
+                    )
                 ),
                 (
                     "Median Ending Return",
-                    f"{results['median_return']:.2f}%"
+                    (
+                        f"{results['median_return']:.2f}%"
+                    )
                 ),
                 (
                     "5th Percentile",
-                    f"{results['percentile_5']:.2f}%"
+                    (
+                        f"{results['percentile_5']:.2f}%"
+                    )
                 ),
                 (
                     "95th Percentile",
-                    f"{results['percentile_95']:.2f}%"
+                    (
+                        f"{results['percentile_95']:.2f}%"
+                    )
                 ),
                 (
                     "Probability of Loss",
-                    f"{results['probability_of_loss']:.2f}%"
+                    (
+                        f"{results['probability_of_loss']:.2f}%"
+                    )
                 )
             ]
 
@@ -1304,10 +1672,19 @@ class PowerQuantApp(tk.Tk):
 
                 tk.Label(
                     stats_frame,
-                    text=f"{name}\n{value}",
-                    font=("Arial", 10, "bold"),
+                    text=(
+                        f"{name}\n"
+                        f"{value}"
+                    ),
+                    font=(
+                        "Arial",
+                        10,
+                        "bold"
+                    ),
                     padx=15
-                ).pack(side="left")
+                ).pack(
+                    side="left"
+                )
 
             figure = (
                 self.chart_builder.create_monte_carlo_chart(
@@ -1325,8 +1702,217 @@ class PowerQuantApp(tk.Tk):
         tk.Button(
             controls,
             text="Run Simulation",
-            font=("Arial", 10, "bold"),
+            font=(
+                "Arial",
+                10,
+                "bold"
+            ),
             command=run_simulation
-        ).pack(side="left")
+        ).pack(
+            side="left"
+        )
 
         run_simulation()
+
+    # --------------------------------------------------
+    # Stress Testing
+    # --------------------------------------------------
+
+    def show_stress_test_view(
+        self,
+        container,
+        returns_data,
+        price_area,
+        time_range
+    ):
+
+        self.clear_frame(
+            container
+        )
+
+        tk.Label(
+            container,
+            text="Stress Testing",
+            font=(
+                "Arial",
+                15,
+                "bold"
+            )
+        ).pack(
+            anchor="w",
+            pady=(5, 5)
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Test how the market could behave "
+                "under predefined extreme scenarios."
+            ),
+            font=(
+                "Arial",
+                10
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 10)
+        )
+
+        controls = tk.Frame(
+            container
+        )
+
+        controls.pack(
+            fill="x",
+            pady=(0, 10)
+        )
+
+        tk.Label(
+            controls,
+            text="Scenario:"
+        ).pack(
+            side="left"
+        )
+
+        scenarios = (
+            self.stress_tester.get_scenarios()
+        )
+
+        scenario_variable = (
+            tk.StringVar(
+                value=scenarios[0]
+            )
+        )
+
+        scenario_box = ttk.Combobox(
+            controls,
+            textvariable=scenario_variable,
+            values=scenarios,
+            state="readonly",
+            width=22
+        )
+
+        scenario_box.pack(
+            side="left",
+            padx=(5, 15)
+        )
+
+        output_frame = tk.Frame(
+            container
+        )
+
+        output_frame.pack(
+            fill="both",
+            expand=True
+        )
+
+        def run_stress_test():
+
+            self.clear_frame(
+                output_frame
+            )
+
+            scenario_name = (
+                scenario_variable.get()
+            )
+
+            results = (
+                self.stress_tester.run_stress_test(
+                    returns_data,
+                    scenario_name
+                )
+            )
+
+            stats_frame = tk.Frame(
+                output_frame
+            )
+
+            stats_frame.pack(
+                fill="x",
+                pady=(0, 10)
+            )
+
+            stats = [
+                (
+                    "Market Shock",
+                    (
+                        f"{results['market_shock']:.1f}%"
+                    )
+                ),
+                (
+                    "Baseline Return",
+                    (
+                        f"{results['baseline_mean']:.2f}%"
+                    )
+                ),
+                (
+                    "Stressed Return",
+                    (
+                        f"{results['stressed_return']:.2f}%"
+                    )
+                ),
+                (
+                    "Baseline Volatility",
+                    (
+                        f"{results['baseline_volatility']:.2f}%"
+                    )
+                ),
+                (
+                    "Stressed Volatility",
+                    (
+                        f"{results['stressed_volatility']:.2f}%"
+                    )
+                ),
+                (
+                    "Estimated Loss",
+                    (
+                        f"{results['estimated_loss']:.2f}%"
+                    )
+                )
+            ]
+
+            for name, value in stats:
+
+                tk.Label(
+                    stats_frame,
+                    text=(
+                        f"{name}\n"
+                        f"{value}"
+                    ),
+                    font=(
+                        "Arial",
+                        10,
+                        "bold"
+                    ),
+                    padx=14
+                ).pack(
+                    side="left"
+                )
+
+            figure = (
+                self.chart_builder.create_stress_test_chart(
+                    results,
+                    price_area,
+                    time_range
+                )
+            )
+
+            self.embed_chart(
+                output_frame,
+                figure
+            )
+
+        tk.Button(
+            controls,
+            text="Run Stress Test",
+            font=(
+                "Arial",
+                10,
+                "bold"
+            ),
+            command=run_stress_test
+        ).pack(
+            side="left"
+        )
+
+        run_stress_test()
