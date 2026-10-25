@@ -12,6 +12,7 @@ from src.analytics.statistics import StatisticsAnalyzer
 from src.analytics.volatility import VolatilityAnalyzer
 from src.analytics.correlation import CorrelationAnalyzer
 from src.portfolio.portfolio import PortfolioAnalyzer
+from src.portfolio.optimization import PortfolioOptimizer
 from src.visualization.charts import ChartBuilder
 
 
@@ -32,6 +33,7 @@ class PowerQuantApp(tk.Tk):
         self.volatility_analyzer = VolatilityAnalyzer()
         self.correlation_analyzer = CorrelationAnalyzer()
         self.portfolio_analyzer = PortfolioAnalyzer()
+        self.portfolio_optimizer = PortfolioOptimizer()
 
         self.selected_range = "1D"
 
@@ -267,6 +269,11 @@ class PowerQuantApp(tk.Tk):
                 )
             )
 
+            # -----------------------------------------
+            # Get both DK1 and DK2 for correlation
+            # and portfolio analysis
+            # -----------------------------------------
+
             if price_area == "DK1":
 
                 dk1_prices = prices
@@ -399,6 +406,10 @@ class PowerQuantApp(tk.Tk):
             pady=20
         )
 
+        # --------------------------------------------------
+        # Market information
+        # --------------------------------------------------
+
         info_frame = tk.Frame(content)
 
         info_frame.pack(
@@ -437,6 +448,10 @@ class PowerQuantApp(tk.Tk):
             )
 
             label.pack(side="left")
+
+        # --------------------------------------------------
+        # Navigation
+        # --------------------------------------------------
 
         analysis_navigation = tk.Frame(content)
 
@@ -557,16 +572,9 @@ class PowerQuantApp(tk.Tk):
             resolution
         )
 
-        canvas = FigureCanvasTkAgg(
-            figure,
-            master=container
-        )
-
-        canvas.draw()
-
-        canvas.get_tk_widget().pack(
-            fill="both",
-            expand=True
+        self.embed_chart(
+            container,
+            figure
         )
 
     # --------------------------------------------------
@@ -839,8 +847,8 @@ class PowerQuantApp(tk.Tk):
         description = tk.Label(
             container,
             text=(
-                "Adjust the DK1 portfolio weight. "
-                "The remaining weight is automatically allocated to DK2."
+                "Adjust the DK1 portfolio weight manually, "
+                "or let PowerQuant find the minimum-volatility portfolio."
             ),
             font=("Arial", 10)
         )
@@ -889,15 +897,14 @@ class PowerQuantApp(tk.Tk):
             expand=True
         )
 
-        def update_portfolio():
+        # -----------------------------------------
+        # Display portfolio
+        # -----------------------------------------
+
+        def display_portfolio(dk1_weight):
 
             self.clear_frame(
                 output_frame
-            )
-
-            dk1_weight = (
-                weight_variable.get()
-                / 100
             )
 
             portfolio_data = (
@@ -926,11 +933,11 @@ class PowerQuantApp(tk.Tk):
             stats = [
                 (
                     "DK1 Weight",
-                    f"{statistics['dk1_weight'] * 100:.0f}%"
+                    f"{statistics['dk1_weight'] * 100:.1f}%"
                 ),
                 (
                     "DK2 Weight",
-                    f"{statistics['dk2_weight'] * 100:.0f}%"
+                    f"{statistics['dk2_weight'] * 100:.1f}%"
                 ),
                 (
                     "Mean Portfolio Return",
@@ -976,21 +983,90 @@ class PowerQuantApp(tk.Tk):
                 figure
             )
 
-        update_button = tk.Button(
+        # -----------------------------------------
+        # Manual portfolio
+        # -----------------------------------------
+
+        def update_manual_portfolio():
+
+            dk1_weight = (
+                weight_variable.get()
+                / 100
+            )
+
+            display_portfolio(
+                dk1_weight
+            )
+
+        manual_button = tk.Button(
             controls,
             text="Update Portfolio",
-            command=update_portfolio
+            command=update_manual_portfolio
         )
 
-        update_button.pack(
+        manual_button.pack(
             side="left",
             padx=10
         )
 
-        update_portfolio()
+        # -----------------------------------------
+        # Minimum volatility optimization
+        # -----------------------------------------
+
+        def optimize_portfolio():
+
+            optimal = (
+                self.portfolio_optimizer.find_minimum_volatility_portfolio(
+                    correlation_data
+                )
+            )
+
+            optimal_dk1_weight = (
+                optimal["dk1_weight"]
+            )
+
+            weight_variable.set(
+                optimal_dk1_weight * 100
+            )
+
+            display_portfolio(
+                optimal_dk1_weight
+            )
+
+            messagebox.showinfo(
+                "Minimum Volatility Portfolio",
+                (
+                    "Optimization complete.\n\n"
+                    f"DK1 Weight: "
+                    f"{optimal['dk1_weight'] * 100:.2f}%\n"
+                    f"DK2 Weight: "
+                    f"{optimal['dk2_weight'] * 100:.2f}%\n"
+                    f"Mean Return: "
+                    f"{optimal['mean_return']:.2f}%\n"
+                    f"Portfolio Volatility: "
+                    f"{optimal['volatility']:.2f}%"
+                )
+            )
+
+        optimize_button = tk.Button(
+            controls,
+            text="Find Minimum Volatility",
+            font=("Arial", 10, "bold"),
+            command=optimize_portfolio
+        )
+
+        optimize_button.pack(
+            side="left",
+            padx=10
+        )
+
+        # Initial 50/50 portfolio
+        display_portfolio(
+            0.50
+        )
 
     # --------------------------------------------------
-    # Embed Matplotlib chart
+    # Embed chart
     # --------------------------------------------------
 
     def embed_chart(
