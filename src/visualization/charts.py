@@ -347,3 +347,110 @@ class ChartBuilder:
         figure.tight_layout()
 
         return figure
+
+    # --------------------------------------------------
+    # Correlation scatter plot
+    # --------------------------------------------------
+
+    def create_correlation_chart(
+        self,
+        correlation_data,
+        time_range
+    ):
+
+        figure = Figure(
+            figsize=(10, 5),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(111)
+
+        if correlation_data.empty:
+
+            axis.text(
+                0.5,
+                0.5,
+                "Not enough data to calculate correlation.",
+                horizontalalignment="center",
+                verticalalignment="center",
+                transform=axis.transAxes
+            )
+
+            return figure
+
+        axis.scatter(
+            correlation_data["DK1Return"],
+            correlation_data["DK2Return"],
+            alpha=0.6
+        )
+
+        # Trend line
+        if len(correlation_data) >= 2:
+
+            x_values = correlation_data[
+                "DK1Return"
+            ].to_numpy()
+
+            y_values = correlation_data[
+                "DK2Return"
+            ].to_numpy()
+
+            slope, intercept = np.polyfit(
+                x_values,
+                y_values,
+                1
+            )
+
+            trend_x = np.linspace(
+                x_values.min(),
+                x_values.max(),
+                100
+            )
+
+            trend_y = (
+                slope * trend_x
+                + intercept
+            )
+
+            axis.plot(
+                trend_x,
+                trend_y,
+                linestyle="--",
+                linewidth=1.5,
+                label="Linear Trend"
+            )
+
+            axis.legend()
+
+        axis.axhline(
+            y=0,
+            linewidth=1,
+            alpha=0.4
+        )
+
+        axis.axvline(
+            x=0,
+            linewidth=1,
+            alpha=0.4
+        )
+
+        axis.set_title(
+            f"DK1 vs DK2 Return Correlation - {time_range}"
+        )
+
+        axis.set_xlabel(
+            "DK1 Return (%)"
+        )
+
+        axis.set_ylabel(
+            "DK2 Return (%)"
+        )
+
+        axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        figure.tight_layout()
+
+        return figure

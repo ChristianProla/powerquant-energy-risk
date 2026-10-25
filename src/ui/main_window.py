@@ -10,6 +10,7 @@ from src.analytics.resampling import MarketDataResampler
 from src.analytics.returns import ReturnCalculator
 from src.analytics.statistics import StatisticsAnalyzer
 from src.analytics.volatility import VolatilityAnalyzer
+from src.analytics.correlation import CorrelationAnalyzer
 from src.visualization.charts import ChartBuilder
 
 
@@ -28,6 +29,7 @@ class PowerQuantApp(tk.Tk):
         self.return_calculator = ReturnCalculator()
         self.statistics_analyzer = StatisticsAnalyzer()
         self.volatility_analyzer = VolatilityAnalyzer()
+        self.correlation_analyzer = CorrelationAnalyzer()
 
         self.selected_range = "1D"
 
@@ -206,7 +208,7 @@ class PowerQuantApp(tk.Tk):
         )
 
     # --------------------------------------------------
-    # Load data
+    # Load market data
     # --------------------------------------------------
 
     def load_market_data(self):
@@ -228,6 +230,10 @@ class PowerQuantApp(tk.Tk):
         self.update()
 
         try:
+
+            # ------------------------------------------
+            # Selected market
+            # ------------------------------------------
 
             prices = self.api.get_prices(
                 price_area=price_area,
@@ -267,11 +273,71 @@ class PowerQuantApp(tk.Tk):
                 )
             )
 
+            # ------------------------------------------
+            # Correlation data
+            # ------------------------------------------
+
+            if price_area == "DK1":
+                dk1_prices = prices
+
+                dk2_prices = self.api.get_prices(
+                    price_area="DK2",
+                    start_date=start_date,
+                    end_date="now"
+                )
+
+            else:
+                dk2_prices = prices
+
+                dk1_prices = self.api.get_prices(
+                    price_area="DK1",
+                    start_date=start_date,
+                    end_date="now"
+                )
+
+            dk1_chart_data, _ = (
+                self.resampler.resample_for_range(
+                    dk1_prices,
+                    self.selected_range
+                )
+            )
+
+            dk2_chart_data, _ = (
+                self.resampler.resample_for_range(
+                    dk2_prices,
+                    self.selected_range
+                )
+            )
+
+            dk1_returns = (
+                self.return_calculator.calculate_returns(
+                    dk1_chart_data
+                )
+            )
+
+            dk2_returns = (
+                self.return_calculator.calculate_returns(
+                    dk2_chart_data
+                )
+            )
+
+            correlation_data = (
+                self.correlation_analyzer.prepare_correlation_data(
+                    dk1_returns,
+                    dk2_returns
+                )
+            )
+
+            # ------------------------------------------
+            # Open analysis page
+            # ------------------------------------------
+
             self.show_market_page(
                 prices,
                 chart_data,
                 returns_data,
                 volatility_data,
+                correlation_data,
                 price_area,
                 readable_range,
                 resolution
@@ -333,6 +399,7 @@ class PowerQuantApp(tk.Tk):
         chart_data,
         returns_data,
         volatility_data,
+        correlation_data,
         price_area,
         time_range,
         resolution
@@ -377,7 +444,7 @@ class PowerQuantApp(tk.Tk):
         )
 
         # --------------------------------------------------
-        # General information
+        # General market information
         # --------------------------------------------------
 
         info_frame = tk.Frame(content)
@@ -530,6 +597,22 @@ class PowerQuantApp(tk.Tk):
         )
 
         volatility_button.pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        correlation_button = tk.Button(
+            analysis_navigation,
+            text="Correlation",
+            command=lambda:
+            self.show_correlation_view(
+                analysis_content,
+                correlation_data,
+                time_range
+            )
+        )
+
+        correlation_button.pack(
             side="left"
         )
 
@@ -875,6 +958,85 @@ class PowerQuantApp(tk.Tk):
         figure = self.chart_builder.create_volatility_chart(
             volatility_data,
             price_area,
+            time_range
+        )
+
+        canvas = FigureCanvasTkAgg(
+            figure,
+            master=container
+        )
+
+        canvas.draw()
+
+        canvas.get_tk_widget().pack(
+            fill="both",
+            expand=True
+        )
+
+    # --------------------------------------------------
+    # Correlation view
+    # --------------------------------------------------
+
+    def show_correlation_view(
+        self,
+        container,
+        correlation_data,
+        time_range
+    ):
+
+        self.clear_frame(container)
+
+        correlation_statistics = (
+            self.correlation_analyzer.calculate_correlation(
+                correlation_data
+            )
+        )
+
+        stats_frame = tk.Frame(container)
+
+        stats_frame.pack(
+            fill="x",
+            pady=(5, 10)
+        )
+
+        correlation_label = tk.Label(
+            stats_frame,
+            text=(
+                f"Pearson Correlation\n"
+                f"{correlation_statistics['correlation']:.3f}"
+            ),
+            font=("Arial", 11, "bold"),
+            padx=25
+        )
+
+        correlation_label.pack(side="left")
+
+        strength_label = tk.Label(
+            stats_frame,
+            text=(
+                f"Relationship\n"
+                f"{correlation_statistics['strength']}"
+            ),
+            font=("Arial", 11, "bold"),
+            padx=25
+        )
+
+        strength_label.pack(side="left")
+
+        observations_label = tk.Label(
+            stats_frame,
+            text=(
+                f"Matched Observations\n"
+                f"{correlation_statistics['observations']:,}"
+            ),
+            font=("Arial", 11, "bold"),
+            padx=25
+        )
+
+        observations_label.pack(side="left")
+
+        figure = self.chart_builder.create_correlation_chart(
+            correlation_data,
             time_range
         )
 
