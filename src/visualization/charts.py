@@ -97,6 +97,10 @@ class ChartBuilder:
                 rotation=45
             )
 
+    # --------------------------------------------------
+    # Price chart
+    # --------------------------------------------------
+
     def create_price_chart(
         self,
         dataframe,
@@ -139,6 +143,10 @@ class ChartBuilder:
         figure.tight_layout()
 
         return figure
+
+    # --------------------------------------------------
+    # Returns chart
+    # --------------------------------------------------
 
     def create_returns_chart(
         self,
@@ -187,6 +195,10 @@ class ChartBuilder:
         figure.tight_layout()
 
         return figure
+
+    # --------------------------------------------------
+    # Return distribution
+    # --------------------------------------------------
 
     def create_distribution_chart(
         self,
@@ -276,6 +288,61 @@ class ChartBuilder:
         )
 
         axis.legend()
+
+        figure.tight_layout()
+
+        return figure
+
+    # --------------------------------------------------
+    # Volatility chart
+    # --------------------------------------------------
+
+    def create_volatility_chart(
+        self,
+        volatility_dataframe,
+        price_area,
+        time_range
+    ):
+
+        figure = Figure(
+            figsize=(10, 5),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(111)
+
+        axis.plot(
+            volatility_dataframe["TimeDK"],
+            volatility_dataframe["Volatility7"],
+            label="7-Period Volatility"
+        )
+
+        axis.plot(
+            volatility_dataframe["TimeDK"],
+            volatility_dataframe["Volatility30"],
+            label="30-Period Volatility"
+        )
+
+        axis.set_title(
+            f"{price_area} Rolling Volatility - {time_range}"
+        )
+
+        axis.set_ylabel(
+            "Volatility (%)"
+        )
+
+        axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        axis.legend()
+
+        self._format_x_axis(
+            axis,
+            figure,
+            time_range
+        )
 
         figure.tight_layout()
 

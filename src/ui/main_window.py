@@ -9,6 +9,7 @@ from src.api.electricity_api import ElectricityAPI
 from src.analytics.resampling import MarketDataResampler
 from src.analytics.returns import ReturnCalculator
 from src.analytics.statistics import StatisticsAnalyzer
+from src.analytics.volatility import VolatilityAnalyzer
 from src.visualization.charts import ChartBuilder
 
 
@@ -26,6 +27,7 @@ class PowerQuantApp(tk.Tk):
         self.resampler = MarketDataResampler()
         self.return_calculator = ReturnCalculator()
         self.statistics_analyzer = StatisticsAnalyzer()
+        self.volatility_analyzer = VolatilityAnalyzer()
 
         self.selected_range = "1D"
 
@@ -39,6 +41,10 @@ class PowerQuantApp(tk.Tk):
 
         self.show_home_page()
 
+    # --------------------------------------------------
+    # Helpers
+    # --------------------------------------------------
+
     def clear_window(self):
 
         for widget in self.winfo_children():
@@ -48,6 +54,10 @@ class PowerQuantApp(tk.Tk):
 
         for widget in frame.winfo_children():
             widget.destroy()
+
+    # --------------------------------------------------
+    # Home page
+    # --------------------------------------------------
 
     def show_home_page(self):
 
@@ -179,6 +189,10 @@ class PowerQuantApp(tk.Tk):
             pady=(20, 0)
         )
 
+    # --------------------------------------------------
+    # Time selection
+    # --------------------------------------------------
+
     def select_range(self, time_range):
 
         self.selected_range = time_range
@@ -190,6 +204,10 @@ class PowerQuantApp(tk.Tk):
         self.range_label.config(
             text=f"Selected: {readable_name}"
         )
+
+    # --------------------------------------------------
+    # Load data
+    # --------------------------------------------------
 
     def load_market_data(self):
 
@@ -243,10 +261,17 @@ class PowerQuantApp(tk.Tk):
                 )
             )
 
+            volatility_data = (
+                self.volatility_analyzer.calculate_volatility(
+                    returns_data
+                )
+            )
+
             self.show_market_page(
                 prices,
                 chart_data,
                 returns_data,
+                volatility_data,
                 price_area,
                 readable_range,
                 resolution
@@ -298,11 +323,16 @@ class PowerQuantApp(tk.Tk):
                 f"An unexpected error occurred.\n\n{error}"
             )
 
+    # --------------------------------------------------
+    # Market page
+    # --------------------------------------------------
+
     def show_market_page(
         self,
         prices,
         chart_data,
         returns_data,
+        volatility_data,
         price_area,
         time_range,
         resolution
@@ -345,6 +375,10 @@ class PowerQuantApp(tk.Tk):
             padx=30,
             pady=20
         )
+
+        # --------------------------------------------------
+        # General information
+        # --------------------------------------------------
 
         info_frame = tk.Frame(content)
 
@@ -413,6 +447,10 @@ class PowerQuantApp(tk.Tk):
 
         resolution_label.pack(side="left")
 
+        # --------------------------------------------------
+        # Analysis navigation
+        # --------------------------------------------------
+
         analysis_navigation = tk.Frame(content)
 
         analysis_navigation.pack(
@@ -475,6 +513,23 @@ class PowerQuantApp(tk.Tk):
         )
 
         statistics_button.pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        volatility_button = tk.Button(
+            analysis_navigation,
+            text="Volatility",
+            command=lambda:
+            self.show_volatility_view(
+                analysis_content,
+                volatility_data,
+                price_area,
+                time_range
+            )
+        )
+
+        volatility_button.pack(
             side="left"
         )
 
@@ -485,6 +540,10 @@ class PowerQuantApp(tk.Tk):
             time_range,
             resolution
         )
+
+    # --------------------------------------------------
+    # Price view
+    # --------------------------------------------------
 
     def show_price_view(
         self,
@@ -515,6 +574,10 @@ class PowerQuantApp(tk.Tk):
             fill="both",
             expand=True
         )
+
+    # --------------------------------------------------
+    # Returns view
+    # --------------------------------------------------
 
     def show_returns_view(
         self,
@@ -604,6 +667,10 @@ class PowerQuantApp(tk.Tk):
             fill="both",
             expand=True
         )
+
+    # --------------------------------------------------
+    # Statistics view
+    # --------------------------------------------------
 
     def show_statistics_view(
         self,
@@ -714,6 +781,99 @@ class PowerQuantApp(tk.Tk):
 
         figure = self.chart_builder.create_distribution_chart(
             returns_data,
+            price_area,
+            time_range
+        )
+
+        canvas = FigureCanvasTkAgg(
+            figure,
+            master=container
+        )
+
+        canvas.draw()
+
+        canvas.get_tk_widget().pack(
+            fill="both",
+            expand=True
+        )
+
+    # --------------------------------------------------
+    # Volatility view
+    # --------------------------------------------------
+
+    def show_volatility_view(
+        self,
+        container,
+        volatility_data,
+        price_area,
+        time_range
+    ):
+
+        self.clear_frame(container)
+
+        volatility_statistics = (
+            self.volatility_analyzer.get_volatility_statistics(
+                volatility_data
+            )
+        )
+
+        stats_frame = tk.Frame(container)
+
+        stats_frame.pack(
+            fill="x",
+            pady=(5, 10)
+        )
+
+        current_7_label = tk.Label(
+            stats_frame,
+            text=(
+                f"Current 7-Period Volatility\n"
+                f"{volatility_statistics['current_7']:.2f}%"
+            ),
+            font=("Arial", 11, "bold"),
+            padx=20
+        )
+
+        current_7_label.pack(side="left")
+
+        current_30_label = tk.Label(
+            stats_frame,
+            text=(
+                f"Current 30-Period Volatility\n"
+                f"{volatility_statistics['current_30']:.2f}%"
+            ),
+            font=("Arial", 11, "bold"),
+            padx=20
+        )
+
+        current_30_label.pack(side="left")
+
+        average_label = tk.Label(
+            stats_frame,
+            text=(
+                f"Average 30-Period Volatility\n"
+                f"{volatility_statistics['average_30']:.2f}%"
+            ),
+            font=("Arial", 11, "bold"),
+            padx=20
+        )
+
+        average_label.pack(side="left")
+
+        maximum_label = tk.Label(
+            stats_frame,
+            text=(
+                f"Maximum 30-Period Volatility\n"
+                f"{volatility_statistics['maximum_30']:.2f}%"
+            ),
+            font=("Arial", 11, "bold"),
+            padx=20
+        )
+
+        maximum_label.pack(side="left")
+
+        figure = self.chart_builder.create_volatility_chart(
+            volatility_data,
             price_area,
             time_range
         )
