@@ -294,7 +294,7 @@ class ChartBuilder:
         return figure
 
     # --------------------------------------------------
-    # Volatility chart
+    # Volatility
     # --------------------------------------------------
 
     def create_volatility_chart(
@@ -349,7 +349,7 @@ class ChartBuilder:
         return figure
 
     # --------------------------------------------------
-    # Correlation chart
+    # Correlation
     # --------------------------------------------------
 
     def create_correlation_chart(
@@ -455,7 +455,7 @@ class ChartBuilder:
         return figure
 
     # --------------------------------------------------
-    # Portfolio chart
+    # Portfolio
     # --------------------------------------------------
 
     def create_portfolio_chart(
@@ -511,6 +511,100 @@ class ChartBuilder:
             figure,
             time_range
         )
+
+        figure.tight_layout()
+
+        return figure
+
+    # --------------------------------------------------
+    # Value at Risk
+    # --------------------------------------------------
+
+    def create_var_chart(
+        self,
+        returns_dataframe,
+        price_area,
+        time_range,
+        var_statistics
+    ):
+
+        returns = returns_dataframe[
+            "PercentageReturn"
+        ].dropna()
+
+        figure = Figure(
+            figsize=(10, 5),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(111)
+
+        if returns.empty:
+
+            axis.text(
+                0.5,
+                0.5,
+                "Not enough data to calculate Value at Risk.",
+                horizontalalignment="center",
+                verticalalignment="center",
+                transform=axis.transAxes
+            )
+
+            return figure
+
+        axis.hist(
+            returns,
+            bins=30,
+            alpha=0.7,
+            label="Historical Returns"
+        )
+
+        var_95_line = (
+            -var_statistics["var_95"]
+        )
+
+        var_99_line = (
+            -var_statistics["var_99"]
+        )
+
+        axis.axvline(
+            var_95_line,
+            linestyle="--",
+            linewidth=2,
+            label="95% VaR"
+        )
+
+        axis.axvline(
+            var_99_line,
+            linestyle=":",
+            linewidth=2,
+            label="99% VaR"
+        )
+
+        axis.axvline(
+            0,
+            linewidth=1,
+            alpha=0.5
+        )
+
+        axis.set_title(
+            f"{price_area} Historical Value at Risk - {time_range}"
+        )
+
+        axis.set_xlabel(
+            "Return (%)"
+        )
+
+        axis.set_ylabel(
+            "Frequency"
+        )
+
+        axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        axis.legend()
 
         figure.tight_layout()
 
