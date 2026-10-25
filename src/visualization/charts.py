@@ -517,15 +517,16 @@ class ChartBuilder:
         return figure
 
     # --------------------------------------------------
-    # Value at Risk
+    # Risk: VaR + Expected Shortfall
     # --------------------------------------------------
 
-    def create_var_chart(
+    def create_risk_chart(
         self,
         returns_dataframe,
         price_area,
         time_range,
-        var_statistics
+        var_statistics,
+        es_statistics
     ):
 
         returns = returns_dataframe[
@@ -544,7 +545,7 @@ class ChartBuilder:
             axis.text(
                 0.5,
                 0.5,
-                "Not enough data to calculate Value at Risk.",
+                "Not enough data to calculate risk.",
                 horizontalalignment="center",
                 verticalalignment="center",
                 transform=axis.transAxes
@@ -567,6 +568,18 @@ class ChartBuilder:
             -var_statistics["var_99"]
         )
 
+        es_95_line = (
+            -es_statistics["es_95"]
+        )
+
+        es_99_line = (
+            -es_statistics["es_99"]
+        )
+
+        # -----------------------------------------
+        # VaR lines
+        # -----------------------------------------
+
         axis.axvline(
             var_95_line,
             linestyle="--",
@@ -581,14 +594,43 @@ class ChartBuilder:
             label="99% VaR"
         )
 
+        # -----------------------------------------
+        # Expected Shortfall lines
+        # -----------------------------------------
+
+        axis.axvline(
+            es_95_line,
+            linestyle="-.",
+            linewidth=2,
+            label="95% Expected Shortfall"
+        )
+
+        axis.axvline(
+            es_99_line,
+            linestyle="-.",
+            linewidth=1.5,
+            label="99% Expected Shortfall"
+        )
+
         axis.axvline(
             0,
             linewidth=1,
             alpha=0.5
         )
 
+        # -----------------------------------------
+        # Highlight 95% tail
+        # -----------------------------------------
+
+        axis.axvspan(
+            returns.min(),
+            var_95_line,
+            alpha=0.10,
+            label="95% Loss Tail"
+        )
+
         axis.set_title(
-            f"{price_area} Historical Value at Risk - {time_range}"
+            f"{price_area} Historical Risk Analysis - {time_range}"
         )
 
         axis.set_xlabel(

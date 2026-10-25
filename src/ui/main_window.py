@@ -14,6 +14,7 @@ from src.analytics.correlation import CorrelationAnalyzer
 from src.portfolio.portfolio import PortfolioAnalyzer
 from src.portfolio.optimization import PortfolioOptimizer
 from src.risk.value_at_risk import ValueAtRiskAnalyzer
+from src.risk.expected_shortfall import ExpectedShortfallAnalyzer
 from src.visualization.charts import ChartBuilder
 
 
@@ -36,6 +37,7 @@ class PowerQuantApp(tk.Tk):
         self.portfolio_analyzer = PortfolioAnalyzer()
         self.portfolio_optimizer = PortfolioOptimizer()
         self.var_analyzer = ValueAtRiskAnalyzer()
+        self.es_analyzer = ExpectedShortfallAnalyzer()
 
         self.selected_range = "1D"
 
@@ -82,7 +84,7 @@ class PowerQuantApp(tk.Tk):
         )
 
     # --------------------------------------------------
-    # Home
+    # Home page
     # --------------------------------------------------
 
     def show_home_page(self):
@@ -97,21 +99,17 @@ class PowerQuantApp(tk.Tk):
             pady=(30, 10)
         )
 
-        title = tk.Label(
+        tk.Label(
             header,
             text="PowerQuant",
             font=("Arial", 30, "bold")
-        )
+        ).pack(anchor="w")
 
-        title.pack(anchor="w")
-
-        subtitle = tk.Label(
+        tk.Label(
             header,
             text="Electricity Market Analytics & Risk Platform",
             font=("Arial", 14)
-        )
-
-        subtitle.pack(anchor="w")
+        ).pack(anchor="w")
 
         content = tk.Frame(self)
 
@@ -163,15 +161,13 @@ class PowerQuantApp(tk.Tk):
             "1Y"
         ]:
 
-            button = tk.Button(
+            tk.Button(
                 range_frame,
                 text=time_range,
                 width=7,
                 command=lambda value=time_range:
                 self.select_range(value)
-            )
-
-            button.pack(
+            ).pack(
                 side="left",
                 padx=(0, 8)
             )
@@ -206,6 +202,10 @@ class PowerQuantApp(tk.Tk):
             anchor="w",
             pady=(20, 0)
         )
+
+    # --------------------------------------------------
+    # Time selection
+    # --------------------------------------------------
 
     def select_range(
         self,
@@ -279,6 +279,10 @@ class PowerQuantApp(tk.Tk):
                     returns_data
                 )
             )
+
+            # -----------------------------------------
+            # Get both DK1 and DK2
+            # -----------------------------------------
 
             if price_area == "DK1":
 
@@ -629,10 +633,12 @@ class PowerQuantApp(tk.Tk):
                 padx=25
             ).pack(side="left")
 
-        figure = self.chart_builder.create_returns_chart(
-            returns_data,
-            price_area,
-            time_range
+        figure = (
+            self.chart_builder.create_returns_chart(
+                returns_data,
+                price_area,
+                time_range
+            )
         )
 
         self.embed_chart(
@@ -1036,7 +1042,7 @@ class PowerQuantApp(tk.Tk):
         )
 
     # --------------------------------------------------
-    # Risk / Historical VaR
+    # Risk
     # --------------------------------------------------
 
     def show_risk_view(
@@ -1051,7 +1057,7 @@ class PowerQuantApp(tk.Tk):
 
         tk.Label(
             container,
-            text="Historical Value at Risk",
+            text="Historical Risk Analysis",
             font=("Arial", 15, "bold")
         ).pack(
             anchor="w",
@@ -1061,8 +1067,9 @@ class PowerQuantApp(tk.Tk):
         tk.Label(
             container,
             text=(
-                "Historical VaR estimates potential downside risk "
-                "using the observed return distribution."
+                "Value at Risk estimates the loss threshold, "
+                "while Expected Shortfall estimates the average "
+                "loss beyond that threshold."
             ),
             font=("Arial", 10)
         ).pack(
@@ -1076,6 +1083,12 @@ class PowerQuantApp(tk.Tk):
             )
         )
 
+        es_statistics = (
+            self.es_analyzer.calculate_historical_expected_shortfall(
+                returns_data
+            )
+        )
+
         stats_frame = tk.Frame(container)
 
         stats_frame.pack(
@@ -1085,12 +1098,20 @@ class PowerQuantApp(tk.Tk):
 
         stats = [
             (
-                "95% Historical VaR",
+                "95% VaR",
                 f"{var_statistics['var_95']:.2f}%"
             ),
             (
-                "99% Historical VaR",
+                "99% VaR",
                 f"{var_statistics['var_99']:.2f}%"
+            ),
+            (
+                "95% Expected Shortfall",
+                f"{es_statistics['es_95']:.2f}%"
+            ),
+            (
+                "99% Expected Shortfall",
+                f"{es_statistics['es_99']:.2f}%"
             ),
             (
                 "Worst Return",
@@ -1107,16 +1128,17 @@ class PowerQuantApp(tk.Tk):
             tk.Label(
                 stats_frame,
                 text=f"{name}\n{value}",
-                font=("Arial", 11, "bold"),
-                padx=25
+                font=("Arial", 10, "bold"),
+                padx=14
             ).pack(side="left")
 
         figure = (
-            self.chart_builder.create_var_chart(
+            self.chart_builder.create_risk_chart(
                 returns_data,
                 price_area,
                 time_range,
-                var_statistics
+                var_statistics,
+                es_statistics
             )
         )
 
