@@ -98,7 +98,7 @@ class ChartBuilder:
             )
 
     # --------------------------------------------------
-    # Price chart
+    # Price
     # --------------------------------------------------
 
     def create_price_chart(
@@ -145,7 +145,7 @@ class ChartBuilder:
         return figure
 
     # --------------------------------------------------
-    # Returns chart
+    # Returns
     # --------------------------------------------------
 
     def create_returns_chart(
@@ -197,7 +197,7 @@ class ChartBuilder:
         return figure
 
     # --------------------------------------------------
-    # Distribution chart
+    # Distribution
     # --------------------------------------------------
 
     def create_distribution_chart(
@@ -517,7 +517,7 @@ class ChartBuilder:
         return figure
 
     # --------------------------------------------------
-    # Risk: VaR + Expected Shortfall
+    # Risk
     # --------------------------------------------------
 
     def create_risk_chart(
@@ -576,10 +576,6 @@ class ChartBuilder:
             -es_statistics["es_99"]
         )
 
-        # -----------------------------------------
-        # VaR lines
-        # -----------------------------------------
-
         axis.axvline(
             var_95_line,
             linestyle="--",
@@ -593,10 +589,6 @@ class ChartBuilder:
             linewidth=2,
             label="99% VaR"
         )
-
-        # -----------------------------------------
-        # Expected Shortfall lines
-        # -----------------------------------------
 
         axis.axvline(
             es_95_line,
@@ -618,10 +610,6 @@ class ChartBuilder:
             alpha=0.5
         )
 
-        # -----------------------------------------
-        # Highlight 95% tail
-        # -----------------------------------------
-
         axis.axvspan(
             returns.min(),
             var_95_line,
@@ -639,6 +627,104 @@ class ChartBuilder:
 
         axis.set_ylabel(
             "Frequency"
+        )
+
+        axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        axis.legend()
+
+        figure.tight_layout()
+
+        return figure
+
+    # --------------------------------------------------
+    # Monte Carlo
+    # --------------------------------------------------
+
+    def create_monte_carlo_chart(
+        self,
+        simulation_results,
+        price_area,
+        time_range
+    ):
+
+        figure = Figure(
+            figsize=(10, 5),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(111)
+
+        paths = simulation_results[
+            "paths"
+        ]
+
+        if paths.size == 0:
+
+            axis.text(
+                0.5,
+                0.5,
+                "Not enough data to run Monte Carlo simulation.",
+                horizontalalignment="center",
+                verticalalignment="center",
+                transform=axis.transAxes
+            )
+
+            return figure
+
+        number_of_paths = min(
+            100,
+            len(paths)
+        )
+
+        periods = np.arange(
+            1,
+            simulation_results["horizon"] + 1
+        )
+
+        for path_number in range(
+            number_of_paths
+        ):
+
+            axis.plot(
+                periods,
+                paths[path_number],
+                alpha=0.15
+            )
+
+        mean_path = paths.mean(
+            axis=0
+        )
+
+        axis.plot(
+            periods,
+            mean_path,
+            linewidth=2.5,
+            label="Average Simulation"
+        )
+
+        axis.axhline(
+            y=0,
+            linewidth=1,
+            alpha=0.5
+        )
+
+        axis.set_title(
+            (
+                f"{price_area} Monte Carlo Simulation - "
+                f"{time_range}"
+            )
+        )
+
+        axis.set_xlabel(
+            "Future Period"
+        )
+
+        axis.set_ylabel(
+            "Cumulative Simulated Return (%)"
         )
 
         axis.grid(

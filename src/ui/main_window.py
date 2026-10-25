@@ -15,6 +15,7 @@ from src.portfolio.portfolio import PortfolioAnalyzer
 from src.portfolio.optimization import PortfolioOptimizer
 from src.risk.value_at_risk import ValueAtRiskAnalyzer
 from src.risk.expected_shortfall import ExpectedShortfallAnalyzer
+from src.risk.monte_carlo import MonteCarloSimulator
 from src.visualization.charts import ChartBuilder
 
 
@@ -38,6 +39,7 @@ class PowerQuantApp(tk.Tk):
         self.portfolio_optimizer = PortfolioOptimizer()
         self.var_analyzer = ValueAtRiskAnalyzer()
         self.es_analyzer = ExpectedShortfallAnalyzer()
+        self.monte_carlo_simulator = MonteCarloSimulator()
 
         self.selected_range = "1D"
 
@@ -60,7 +62,10 @@ class PowerQuantApp(tk.Tk):
         for widget in self.winfo_children():
             widget.destroy()
 
-    def clear_frame(self, frame):
+    def clear_frame(
+        self,
+        frame
+    ):
 
         for widget in frame.winfo_children():
             widget.destroy()
@@ -84,7 +89,7 @@ class PowerQuantApp(tk.Tk):
         )
 
     # --------------------------------------------------
-    # Home page
+    # Home
     # --------------------------------------------------
 
     def show_home_page(self):
@@ -203,10 +208,6 @@ class PowerQuantApp(tk.Tk):
             pady=(20, 0)
         )
 
-    # --------------------------------------------------
-    # Time selection
-    # --------------------------------------------------
-
     def select_range(
         self,
         time_range
@@ -223,7 +224,7 @@ class PowerQuantApp(tk.Tk):
         )
 
     # --------------------------------------------------
-    # Load data
+    # Load market data
     # --------------------------------------------------
 
     def load_market_data(self):
@@ -279,10 +280,6 @@ class PowerQuantApp(tk.Tk):
                     returns_data
                 )
             )
-
-            # -----------------------------------------
-            # Get both DK1 and DK2
-            # -----------------------------------------
 
             if price_area == "DK1":
 
@@ -363,7 +360,7 @@ class PowerQuantApp(tk.Tk):
             )
 
     # --------------------------------------------------
-    # Main analysis page
+    # Market page
     # --------------------------------------------------
 
     def show_market_page(
@@ -423,7 +420,7 @@ class PowerQuantApp(tk.Tk):
             "DayAheadPriceEUR"
         ].iloc[-1]
 
-        info_values = [
+        information = [
             ("Market", price_area),
             ("Time Range", time_range),
             (
@@ -440,11 +437,11 @@ class PowerQuantApp(tk.Tk):
             )
         ]
 
-        for heading, value in info_values:
+        for name, value in information:
 
             tk.Label(
                 info_frame,
-                text=f"{heading}\n{value}",
+                text=f"{name}\n{value}",
                 font=("Arial", 12, "bold"),
                 padx=20
             ).pack(side="left")
@@ -536,6 +533,16 @@ class PowerQuantApp(tk.Tk):
                     price_area,
                     time_range
                 )
+            ),
+            (
+                "Monte Carlo",
+                lambda:
+                self.show_monte_carlo_view(
+                    analysis_content,
+                    returns_data,
+                    price_area,
+                    time_range
+                )
             )
         ]
 
@@ -573,11 +580,13 @@ class PowerQuantApp(tk.Tk):
 
         self.clear_frame(container)
 
-        figure = self.chart_builder.create_price_chart(
-            chart_data,
-            price_area,
-            time_range,
-            resolution
+        figure = (
+            self.chart_builder.create_price_chart(
+                chart_data,
+                price_area,
+                time_range,
+                resolution
+            )
         )
 
         self.embed_chart(
@@ -779,7 +788,7 @@ class PowerQuantApp(tk.Tk):
 
         self.clear_frame(container)
 
-        stats = (
+        statistics = (
             self.correlation_analyzer.calculate_correlation(
                 correlation_data
             )
@@ -792,15 +801,15 @@ class PowerQuantApp(tk.Tk):
         values = [
             (
                 "Pearson Correlation",
-                f"{stats['correlation']:.3f}"
+                f"{statistics['correlation']:.3f}"
             ),
             (
                 "Relationship",
-                stats["strength"]
+                statistics["strength"]
             ),
             (
                 "Matched Observations",
-                f"{stats['observations']:,}"
+                f"{statistics['observations']:,}"
             )
         ]
 
@@ -875,16 +884,14 @@ class PowerQuantApp(tk.Tk):
             text="DK1 Weight"
         ).pack(side="left")
 
-        slider = tk.Scale(
+        tk.Scale(
             controls,
             from_=0,
             to=100,
             orient="horizontal",
             variable=weight_variable,
             length=300
-        )
-
-        slider.pack(
+        ).pack(
             side="left",
             padx=10
         )
@@ -991,16 +998,16 @@ class PowerQuantApp(tk.Tk):
                 )
             )
 
-            optimal_dk1_weight = (
+            optimal_weight = (
                 optimal["dk1_weight"]
             )
 
             weight_variable.set(
-                optimal_dk1_weight * 100
+                optimal_weight * 100
             )
 
             display_portfolio(
-                optimal_dk1_weight
+                optimal_weight
             )
 
             messagebox.showinfo(
@@ -1062,19 +1069,6 @@ class PowerQuantApp(tk.Tk):
         ).pack(
             anchor="w",
             pady=(5, 5)
-        )
-
-        tk.Label(
-            container,
-            text=(
-                "Value at Risk estimates the loss threshold, "
-                "while Expected Shortfall estimates the average "
-                "loss beyond that threshold."
-            ),
-            font=("Arial", 10)
-        ).pack(
-            anchor="w",
-            pady=(0, 10)
         )
 
         var_statistics = (
@@ -1146,3 +1140,193 @@ class PowerQuantApp(tk.Tk):
             container,
             figure
         )
+
+    # --------------------------------------------------
+    # Monte Carlo
+    # --------------------------------------------------
+
+    def show_monte_carlo_view(
+        self,
+        container,
+        returns_data,
+        price_area,
+        time_range
+    ):
+
+        self.clear_frame(container)
+
+        tk.Label(
+            container,
+            text="Monte Carlo Simulation",
+            font=("Arial", 15, "bold")
+        ).pack(
+            anchor="w",
+            pady=(5, 5)
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Simulate possible future return paths using "
+                "historical mean return and volatility."
+            ),
+            font=("Arial", 10)
+        ).pack(
+            anchor="w",
+            pady=(0, 10)
+        )
+
+        controls = tk.Frame(container)
+
+        controls.pack(
+            fill="x",
+            pady=(0, 10)
+        )
+
+        tk.Label(
+            controls,
+            text="Simulations:"
+        ).pack(side="left")
+
+        simulations_variable = tk.StringVar(
+            value="10000"
+        )
+
+        simulations_box = ttk.Combobox(
+            controls,
+            textvariable=simulations_variable,
+            values=[
+                "1000",
+                "5000",
+                "10000",
+                "25000"
+            ],
+            state="readonly",
+            width=8
+        )
+
+        simulations_box.pack(
+            side="left",
+            padx=(5, 20)
+        )
+
+        tk.Label(
+            controls,
+            text="Forecast Horizon:"
+        ).pack(side="left")
+
+        horizon_variable = tk.StringVar(
+            value="30"
+        )
+
+        horizon_box = ttk.Combobox(
+            controls,
+            textvariable=horizon_variable,
+            values=[
+                "10",
+                "30",
+                "60",
+                "90"
+            ],
+            state="readonly",
+            width=8
+        )
+
+        horizon_box.pack(
+            side="left",
+            padx=(5, 20)
+        )
+
+        output_frame = tk.Frame(
+            container
+        )
+
+        output_frame.pack(
+            fill="both",
+            expand=True
+        )
+
+        def run_simulation():
+
+            self.clear_frame(
+                output_frame
+            )
+
+            simulations = int(
+                simulations_variable.get()
+            )
+
+            horizon = int(
+                horizon_variable.get()
+            )
+
+            results = (
+                self.monte_carlo_simulator.run_simulation(
+                    returns_data,
+                    simulations=simulations,
+                    horizon=horizon
+                )
+            )
+
+            stats_frame = tk.Frame(
+                output_frame
+            )
+
+            stats_frame.pack(
+                fill="x",
+                pady=(0, 10)
+            )
+
+            stats = [
+                (
+                    "Expected Ending Return",
+                    f"{results['expected_return']:.2f}%"
+                ),
+                (
+                    "Median Ending Return",
+                    f"{results['median_return']:.2f}%"
+                ),
+                (
+                    "5th Percentile",
+                    f"{results['percentile_5']:.2f}%"
+                ),
+                (
+                    "95th Percentile",
+                    f"{results['percentile_95']:.2f}%"
+                ),
+                (
+                    "Probability of Loss",
+                    f"{results['probability_of_loss']:.2f}%"
+                )
+            ]
+
+            for name, value in stats:
+
+                tk.Label(
+                    stats_frame,
+                    text=f"{name}\n{value}",
+                    font=("Arial", 10, "bold"),
+                    padx=15
+                ).pack(side="left")
+
+            figure = (
+                self.chart_builder.create_monte_carlo_chart(
+                    results,
+                    price_area,
+                    time_range
+                )
+            )
+
+            self.embed_chart(
+                output_frame,
+                figure
+            )
+
+        tk.Button(
+            controls,
+            text="Run Simulation",
+            font=("Arial", 10, "bold"),
+            command=run_simulation
+        ).pack(side="left")
+
+        run_simulation()
