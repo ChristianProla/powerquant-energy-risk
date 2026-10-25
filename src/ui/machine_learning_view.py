@@ -44,7 +44,7 @@ class MachineLearningView:
             container,
             text=(
                 "Machine Learning "
-                "Price Forecast"
+                "Model Comparison"
             ),
             font=(
                 "Arial",
@@ -59,9 +59,8 @@ class MachineLearningView:
         tk.Label(
             container,
             text=(
-                "Train a Random Forest model "
-                "to predict the next electricity "
-                "price using market and time features."
+                "Compare forecasting models using "
+                "walk-forward time-series validation."
             ),
             font=(
                 "Arial",
@@ -87,51 +86,25 @@ class MachineLearningView:
 
         tk.Label(
             controls,
-            text="Model:"
+            text="Validation Folds:"
         ).pack(
             side="left"
         )
 
-        model_variable = (
+        folds_variable = (
             tk.StringVar(
-                value="Random Forest"
+                value="5"
             )
         )
 
         ttk.Combobox(
             controls,
-            textvariable=model_variable,
+            textvariable=folds_variable,
             values=[
-                "Random Forest"
-            ],
-            state="readonly",
-            width=16
-        ).pack(
-            side="left",
-            padx=(5, 20)
-        )
-
-        tk.Label(
-            controls,
-            text="Trees:"
-        ).pack(
-            side="left"
-        )
-
-        trees_variable = (
-            tk.StringVar(
-                value="300"
-            )
-        )
-
-        ttk.Combobox(
-            controls,
-            textvariable=trees_variable,
-            values=[
-                "100",
-                "200",
-                "300",
-                "500"
+                "3",
+                "4",
+                "5",
+                "6"
             ],
             state="readonly",
             width=8
@@ -150,25 +123,24 @@ class MachineLearningView:
         )
 
         # --------------------------------------------------
-        # Run model
+        # Run comparison
         # --------------------------------------------------
 
-        def run_model():
+        def run_comparison():
 
             self._clear_frame(
                 output_frame
             )
 
-            number_of_trees = int(
-                trees_variable.get()
+            folds = int(
+                folds_variable.get()
             )
 
             results = (
                 self.machine_learning_forecaster
-                .train_random_forest(
+                .compare_models(
                     feature_data,
-                    test_size=0.20,
-                    n_estimators=number_of_trees
+                    n_splits=folds
                 )
             )
 
@@ -202,21 +174,21 @@ class MachineLearningView:
 
         tk.Button(
             controls,
-            text="Train Model",
+            text="Compare Models",
             font=(
                 "Arial",
                 10,
                 "bold"
             ),
-            command=run_model
+            command=run_comparison
         ).pack(
             side="left"
         )
 
-        run_model()
+        run_comparison()
 
     # ==================================================
-    # Display results
+    # Show results
     # ==================================================
 
     def _show_results(
@@ -228,86 +200,25 @@ class MachineLearningView:
     ):
 
         # --------------------------------------------------
-        # Evaluation statistics
+        # Best model summary
         # --------------------------------------------------
 
-        stats_frame = tk.Frame(
+        summary_frame = tk.Frame(
             container
         )
 
-        stats_frame.pack(
+        summary_frame.pack(
             fill="x",
             pady=(0, 8)
         )
 
-        stats = [
+        summary_values = [
             (
-                "MAE",
-                (
-                    f"{results['mae']:.2f} "
-                    f"EUR/MWh"
-                )
+                "Best Model",
+                results[
+                    "best_model"
+                ]
             ),
-            (
-                "RMSE",
-                (
-                    f"{results['rmse']:.2f} "
-                    f"EUR/MWh"
-                )
-            ),
-            (
-                "R²",
-                (
-                    f"{results['r2']:.3f}"
-                )
-            ),
-            (
-                "Baseline MAE",
-                (
-                    f"{results['baseline_mae']:.2f} "
-                    f"EUR/MWh"
-                )
-            ),
-            (
-                "vs Baseline",
-                (
-                    f"{results['improvement_vs_baseline']:+.1f}%"
-                )
-            )
-        ]
-
-        for name, value in stats:
-
-            tk.Label(
-                stats_frame,
-                text=(
-                    f"{name}\n"
-                    f"{value}"
-                ),
-                font=(
-                    "Arial",
-                    9,
-                    "bold"
-                ),
-                padx=13
-            ).pack(
-                side="left"
-            )
-
-        # --------------------------------------------------
-        # Next price prediction
-        # --------------------------------------------------
-
-        prediction_frame = tk.Frame(
-            container
-        )
-
-        prediction_frame.pack(
-            fill="x",
-            pady=(0, 8)
-        )
-
-        prediction_stats = [
             (
                 "Current Price",
                 (
@@ -334,20 +245,16 @@ class MachineLearningView:
                 (
                     f"{results['predicted_change_percent']:+.2f}%"
                 )
-            ),
-            (
-                "Train / Test",
-                (
-                    f"{results['training_observations']} / "
-                    f"{results['testing_observations']}"
-                )
             )
         ]
 
-        for name, value in prediction_stats:
+        for (
+            name,
+            value
+        ) in summary_values:
 
             tk.Label(
-                prediction_frame,
+                summary_frame,
                 text=(
                     f"{name}\n"
                     f"{value}"
@@ -357,73 +264,250 @@ class MachineLearningView:
                     9,
                     "bold"
                 ),
-                padx=13
+                padx=12
             ).pack(
                 side="left"
             )
 
         # --------------------------------------------------
-        # Feature importance
+        # Validation information
         # --------------------------------------------------
 
-        importance_frame = tk.Frame(
+        validation_frame = tk.Frame(
             container
         )
 
-        importance_frame.pack(
+        validation_frame.pack(
             fill="x",
             pady=(0, 8)
         )
 
-        tk.Label(
-            importance_frame,
-            text="Top Features:",
-            font=(
-                "Arial",
-                9,
-                "bold"
+        validation_values = [
+            (
+                "Validation",
+                "Walk-Forward"
+            ),
+            (
+                "Folds",
+                (
+                    f"{results['n_splits']}"
+                )
+            ),
+            (
+                "Total Observations",
+                (
+                    f"{results['total_observations']:,}"
+                )
+            ),
+            (
+                "Validation Predictions",
+                (
+                    f"{results['validation_observations']:,}"
+                )
             )
-        ).pack(
-            side="left",
-            padx=(0, 10)
-        )
+        ]
 
-        top_features = (
-            results[
-                "feature_importance"
-            ].head(5)
-        )
-
-        for _, row in (
-            top_features.iterrows()
-        ):
-
-            feature_name = (
-                row["Feature"]
-            )
-
-            importance = (
-                row["Importance"]
-                * 100
-            )
+        for (
+            name,
+            value
+        ) in validation_values:
 
             tk.Label(
-                importance_frame,
+                validation_frame,
                 text=(
-                    f"{feature_name}: "
-                    f"{importance:.1f}%"
+                    f"{name}\n"
+                    f"{value}"
                 ),
                 font=(
                     "Arial",
                     9
                 ),
-                padx=8
+                padx=12
             ).pack(
                 side="left"
             )
 
         # --------------------------------------------------
-        # Actual vs predicted chart
+        # Model comparison table
+        # --------------------------------------------------
+
+        table_frame = tk.Frame(
+            container
+        )
+
+        table_frame.pack(
+            fill="x",
+            pady=(0, 8)
+        )
+
+        columns = [
+            "Model",
+            "MAE",
+            "RMSE",
+            "R²",
+            "vs Baseline"
+        ]
+
+        for (
+            column_index,
+            column_name
+        ) in enumerate(
+            columns
+        ):
+
+            tk.Label(
+                table_frame,
+                text=column_name,
+                font=(
+                    "Arial",
+                    9,
+                    "bold"
+                ),
+                width=20,
+                anchor="w"
+            ).grid(
+                row=0,
+                column=column_index,
+                padx=3,
+                pady=2
+            )
+
+        comparison_table = (
+            results[
+                "comparison_table"
+            ]
+        )
+
+        for (
+            row_number,
+            (_, row)
+        ) in enumerate(
+            comparison_table.iterrows(),
+            start=1
+        ):
+
+            values = [
+                row["Model"],
+                (
+                    f"{row['MAE']:.2f}"
+                ),
+                (
+                    f"{row['RMSE']:.2f}"
+                ),
+                (
+                    f"{row['R2']:.3f}"
+                ),
+                (
+                    f"{row['ImprovementVsBaseline']:+.1f}%"
+                )
+            ]
+
+            for (
+                column_index,
+                value
+            ) in enumerate(
+                values
+            ):
+
+                font = (
+                    "Arial",
+                    9
+                )
+
+                if (
+                    row["Model"]
+                    == results[
+                        "best_model"
+                    ]
+                ):
+
+                    font = (
+                        "Arial",
+                        9,
+                        "bold"
+                    )
+
+                tk.Label(
+                    table_frame,
+                    text=value,
+                    font=font,
+                    width=20,
+                    anchor="w"
+                ).grid(
+                    row=row_number,
+                    column=column_index,
+                    padx=3,
+                    pady=1
+                )
+
+        # --------------------------------------------------
+        # Top features
+        # --------------------------------------------------
+
+        if not results[
+            "feature_importance"
+        ].empty:
+
+            feature_frame = tk.Frame(
+                container
+            )
+
+            feature_frame.pack(
+                fill="x",
+                pady=(0, 8)
+            )
+
+            tk.Label(
+                feature_frame,
+                text=(
+                    "Top Features:"
+                ),
+                font=(
+                    "Arial",
+                    9,
+                    "bold"
+                )
+            ).pack(
+                side="left",
+                padx=(0, 10)
+            )
+
+            top_features = (
+                results[
+                    "feature_importance"
+                ].head(5)
+            )
+
+            for _, row in (
+                top_features.iterrows()
+            ):
+
+                feature_name = (
+                    row["Feature"]
+                )
+
+                importance = (
+                    row["Importance"]
+                    * 100
+                )
+
+                tk.Label(
+                    feature_frame,
+                    text=(
+                        f"{feature_name}: "
+                        f"{importance:.1f}%"
+                    ),
+                    font=(
+                        "Arial",
+                        9
+                    ),
+                    padx=7
+                ).pack(
+                    side="left"
+                )
+
+        # --------------------------------------------------
+        # Chart
         # --------------------------------------------------
 
         figure = (
@@ -447,7 +531,7 @@ class MachineLearningView:
         )
 
     # ==================================================
-    # Prediction chart
+    # Actual vs predicted
     # ==================================================
 
     def _create_prediction_chart(
@@ -458,7 +542,7 @@ class MachineLearningView:
     ):
 
         figure = Figure(
-            figsize=(10, 4.5),
+            figsize=(10, 4),
             dpi=100
         )
 
@@ -466,46 +550,49 @@ class MachineLearningView:
             111
         )
 
-        test_times = results[
-            "test_times"
+        times = results[
+            "prediction_times"
         ]
 
-        actual_prices = results[
+        actual = results[
             "actual_prices"
         ]
 
-        predicted_prices = results[
-            "predicted_prices"
+        predicted = results[
+            "best_predictions"
         ]
 
         axis.plot(
-            test_times,
-            actual_prices,
+            times,
+            actual,
             label="Actual Price",
             linewidth=2
         )
 
         axis.plot(
-            test_times,
-            predicted_prices,
-            label="Random Forest Prediction",
+            times,
+            predicted,
+            label=(
+                f"{results['best_model']} Prediction"
+            ),
             linestyle="--",
             linewidth=2
         )
 
         axis.set_title(
             (
-                f"{price_area} Machine Learning Forecast "
+                f"{price_area} "
+                f"Walk-Forward Validation "
                 f"- {time_range}"
             )
         )
 
-        axis.set_ylabel(
-            "Price (EUR/MWh)"
+        axis.set_xlabel(
+            "Validation Period"
         )
 
-        axis.set_xlabel(
-            "Test Period"
+        axis.set_ylabel(
+            "Price (EUR/MWh)"
         )
 
         axis.grid(
