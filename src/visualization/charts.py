@@ -197,7 +197,7 @@ class ChartBuilder:
         return figure
 
     # --------------------------------------------------
-    # Return distribution
+    # Distribution chart
     # --------------------------------------------------
 
     def create_distribution_chart(
@@ -349,7 +349,7 @@ class ChartBuilder:
         return figure
 
     # --------------------------------------------------
-    # Correlation scatter plot
+    # Correlation chart
     # --------------------------------------------------
 
     def create_correlation_chart(
@@ -384,7 +384,6 @@ class ChartBuilder:
             alpha=0.6
         )
 
-        # Trend line
         if len(correlation_data) >= 2:
 
             x_values = correlation_data[
@@ -449,6 +448,68 @@ class ChartBuilder:
         axis.grid(
             True,
             alpha=0.3
+        )
+
+        figure.tight_layout()
+
+        return figure
+
+    # --------------------------------------------------
+    # Portfolio chart
+    # --------------------------------------------------
+
+    def create_portfolio_chart(
+        self,
+        portfolio_data,
+        time_range,
+        dk1_weight
+    ):
+
+        figure = Figure(
+            figsize=(10, 5),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(111)
+
+        dk2_weight = 1 - dk1_weight
+
+        axis.plot(
+            portfolio_data["TimeDK"],
+            portfolio_data["CumulativePortfolioReturn"],
+            label="Portfolio"
+        )
+
+        axis.set_title(
+            (
+                "DK1 / DK2 Portfolio - "
+                f"{time_range} "
+                f"({dk1_weight * 100:.0f}% / "
+                f"{dk2_weight * 100:.0f}%)"
+            )
+        )
+
+        axis.set_ylabel(
+            "Cumulative Return (%)"
+        )
+
+        axis.axhline(
+            y=0,
+            linewidth=1,
+            alpha=0.5
+        )
+
+        axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        axis.legend()
+
+        self._format_x_axis(
+            axis,
+            figure,
+            time_range
         )
 
         figure.tight_layout()
