@@ -21,6 +21,10 @@ from src.ui.out_of_sample_view import (
     OutOfSampleView
 )
 
+from src.ui.walk_forward_view import (
+    WalkForwardView
+)
+
 
 class SpreadView:
 
@@ -46,6 +50,13 @@ class SpreadView:
 
         self.out_of_sample_view = (
             OutOfSampleView(
+                self.spread_analyzer,
+                self.backtester
+            )
+        )
+
+        self.walk_forward_view = (
+            WalkForwardView(
                 self.spread_analyzer,
                 self.backtester
             )
@@ -86,9 +97,9 @@ class SpreadView:
         tk.Label(
             container,
             text=(
-                "Analyse signals, backtest mean reversion, "
-                "test parameter robustness and validate "
-                "the strategy on unseen market data."
+                "Analyse spread signals, backtest mean reversion, "
+                "test robustness and validate the strategy "
+                "on unseen market data."
             ),
             font=(
                 "Arial",
@@ -124,7 +135,7 @@ class SpreadView:
             return
 
         # ==================================================
-        # Strategy controls
+        # Strategy settings
         # ==================================================
 
         controls = tk.Frame(
@@ -262,7 +273,7 @@ class SpreadView:
         )
 
         # ==================================================
-        # Navigation buttons
+        # Navigation
         # ==================================================
 
         button_frame = tk.Frame(
@@ -284,7 +295,7 @@ class SpreadView:
         )
 
         # ==================================================
-        # Spread signal analysis
+        # Signal analysis
         # ==================================================
 
         def run_signal_analysis():
@@ -366,8 +377,12 @@ class SpreadView:
                 self.backtester
                 .run_backtest(
                     signal_data,
-                    entry_threshold=entry_threshold,
-                    exit_threshold=exit_threshold,
+                    entry_threshold=(
+                        entry_threshold
+                    ),
+                    exit_threshold=(
+                        exit_threshold
+                    ),
                     transaction_cost_per_leg=(
                         transaction_cost
                     )
@@ -407,8 +422,8 @@ class SpreadView:
             tk.Label(
                 output_frame,
                 text=(
-                    "Testing 300 strategy "
-                    "parameter combinations..."
+                    "Testing strategy parameter "
+                    "combinations..."
                 ),
                 font=(
                     "Arial",
@@ -465,6 +480,18 @@ class SpreadView:
             )
 
         # ==================================================
+        # Walk-forward
+        # ==================================================
+
+        def run_walk_forward():
+
+            self.walk_forward_view.show(
+                output_frame,
+                spread_data,
+                time_range
+            )
+
+        # ==================================================
         # Buttons
         # ==================================================
 
@@ -473,13 +500,13 @@ class SpreadView:
             text="Spread Signals",
             font=(
                 "Arial",
-                10,
+                9,
                 "bold"
             ),
             command=run_signal_analysis
         ).pack(
             side="left",
-            padx=(0, 8)
+            padx=(0, 6)
         )
 
         tk.Button(
@@ -487,13 +514,13 @@ class SpreadView:
             text="Strategy Backtest",
             font=(
                 "Arial",
-                10,
+                9,
                 "bold"
             ),
             command=run_backtest
         ).pack(
             side="left",
-            padx=(0, 8)
+            padx=(0, 6)
         )
 
         tk.Button(
@@ -501,13 +528,13 @@ class SpreadView:
             text="Robustness Test",
             font=(
                 "Arial",
-                10,
+                9,
                 "bold"
             ),
             command=run_robustness_test
         ).pack(
             side="left",
-            padx=(0, 8)
+            padx=(0, 6)
         )
 
         tk.Button(
@@ -515,10 +542,24 @@ class SpreadView:
             text="Out-of-Sample Test",
             font=(
                 "Arial",
-                10,
+                9,
                 "bold"
             ),
             command=run_out_of_sample
+        ).pack(
+            side="left",
+            padx=(0, 6)
+        )
+
+        tk.Button(
+            button_frame,
+            text="Walk-Forward Test",
+            font=(
+                "Arial",
+                9,
+                "bold"
+            ),
+            command=run_walk_forward
         ).pack(
             side="left"
         )
@@ -561,43 +602,40 @@ class SpreadView:
             pady=(0, 5)
         )
 
-        values_1 = [
-            (
-                "Current Spread",
-                (
-                    f"{statistics['current_spread']:+.2f} "
-                    f"EUR/MWh"
-                )
-            ),
-            (
-                "Current Z",
-                (
-                    f"{statistics['current_z_score']:+.2f}"
-                )
-            ),
-            (
-                "Signal",
-                statistics[
-                    "current_signal"
-                ]
-            ),
-            (
-                "Rolling Mean",
-                (
-                    f"{statistics['rolling_mean']:+.2f}"
-                )
-            ),
-            (
-                "Rolling Std.",
-                (
-                    f"{statistics['rolling_std']:.2f}"
-                )
-            )
-        ]
-
         self._show_stats(
             row_1,
-            values_1,
+            [
+                (
+                    "Current Spread",
+                    (
+                        f"{statistics['current_spread']:+.2f}"
+                    )
+                ),
+                (
+                    "Current Z",
+                    (
+                        f"{statistics['current_z_score']:+.2f}"
+                    )
+                ),
+                (
+                    "Signal",
+                    statistics[
+                        "current_signal"
+                    ]
+                ),
+                (
+                    "Rolling Mean",
+                    (
+                        f"{statistics['rolling_mean']:+.2f}"
+                    )
+                ),
+                (
+                    "Rolling Std.",
+                    (
+                        f"{statistics['rolling_std']:.2f}"
+                    )
+                )
+            ],
             bold=True
         )
 
@@ -610,48 +648,46 @@ class SpreadView:
             pady=(0, 7)
         )
 
-        values_2 = [
-            (
-                "Average Spread",
-                (
-                    f"{statistics['average_spread']:+.2f}"
-                )
-            ),
-            (
-                "Maximum Spread",
-                (
-                    f"{statistics['maximum_spread']:+.2f}"
-                )
-            ),
-            (
-                "Minimum Spread",
-                (
-                    f"{statistics['minimum_spread']:+.2f}"
-                )
-            ),
-            (
-                "Upper Signals",
-                statistics[
-                    "upper_signals"
-                ]
-            ),
-            (
-                "Lower Signals",
-                statistics[
-                    "lower_signals"
-                ]
-            ),
-            (
-                "Total Signals",
-                statistics[
-                    "total_signals"
-                ]
-            )
-        ]
-
         self._show_stats(
             row_2,
-            values_2
+            [
+                (
+                    "Average Spread",
+                    (
+                        f"{statistics['average_spread']:+.2f}"
+                    )
+                ),
+                (
+                    "Maximum Spread",
+                    (
+                        f"{statistics['maximum_spread']:+.2f}"
+                    )
+                ),
+                (
+                    "Minimum Spread",
+                    (
+                        f"{statistics['minimum_spread']:+.2f}"
+                    )
+                ),
+                (
+                    "Upper Signals",
+                    statistics[
+                        "upper_signals"
+                    ]
+                ),
+                (
+                    "Lower Signals",
+                    statistics[
+                        "lower_signals"
+                    ]
+                ),
+                (
+                    "Total Signals",
+                    statistics[
+                        "total_signals"
+                    ]
+                )
+            ]
         )
 
         figure = (
@@ -684,20 +720,9 @@ class SpreadView:
             "statistics"
         ]
 
-        backtest_data = results[
-            "backtest_data"
-        ]
-
-        trades = results[
-            "trades"
-        ]
-
         tk.Label(
             container,
-            text=(
-                "Mean-Reversion "
-                "Strategy Backtest"
-            ),
+            text="Mean-Reversion Strategy Backtest",
             font=(
                 "Arial",
                 12,
@@ -705,23 +730,7 @@ class SpreadView:
             )
         ).pack(
             anchor="w",
-            pady=(0, 5)
-        )
-
-        tk.Label(
-            container,
-            text=(
-                "Research backtest only. PnL is measured "
-                "in spread EUR/MWh and does not yet model "
-                "capital, margin or execution constraints."
-            ),
-            font=(
-                "Arial",
-                9
-            )
-        ).pack(
-            anchor="w",
-            pady=(0, 7)
+            pady=(0, 6)
         )
 
         row_1 = tk.Frame(
@@ -733,42 +742,40 @@ class SpreadView:
             pady=(0, 5)
         )
 
-        values_1 = [
-            (
-                "Net PnL",
-                (
-                    f"{statistics['total_net_pnl']:+.2f}"
-                )
-            ),
-            (
-                "Gross PnL",
-                (
-                    f"{statistics['total_gross_pnl']:+.2f}"
-                )
-            ),
-            (
-                "Costs",
-                (
-                    f"{statistics['total_transaction_cost']:.2f}"
-                )
-            ),
-            (
-                "Trades",
-                statistics[
-                    "number_of_trades"
-                ]
-            ),
-            (
-                "Win Rate",
-                (
-                    f"{statistics['win_rate']:.1f}%"
-                )
-            )
-        ]
-
         self._show_stats(
             row_1,
-            values_1,
+            [
+                (
+                    "Net PnL",
+                    (
+                        f"{statistics['total_net_pnl']:+.2f}"
+                    )
+                ),
+                (
+                    "Gross PnL",
+                    (
+                        f"{statistics['total_gross_pnl']:+.2f}"
+                    )
+                ),
+                (
+                    "Costs",
+                    (
+                        f"{statistics['total_transaction_cost']:.2f}"
+                    )
+                ),
+                (
+                    "Trades",
+                    statistics[
+                        "number_of_trades"
+                    ]
+                ),
+                (
+                    "Win Rate",
+                    (
+                        f"{statistics['win_rate']:.1f}%"
+                    )
+                )
+            ],
             bold=True
         )
 
@@ -778,77 +785,50 @@ class SpreadView:
 
         row_2.pack(
             fill="x",
-            pady=(0, 6)
+            pady=(0, 7)
         )
-
-        profit_factor = (
-            statistics[
-                "profit_factor"
-            ]
-        )
-
-        if (
-            profit_factor
-            == float(
-                "inf"
-            )
-        ):
-
-            profit_factor_text = (
-                "∞"
-            )
-
-        else:
-
-            profit_factor_text = (
-                f"{profit_factor:.2f}"
-            )
-
-        values_2 = [
-            (
-                "Avg Trade",
-                (
-                    f"{statistics['average_trade']:+.2f}"
-                )
-            ),
-            (
-                "Best Trade",
-                (
-                    f"{statistics['best_trade']:+.2f}"
-                )
-            ),
-            (
-                "Worst Trade",
-                (
-                    f"{statistics['worst_trade']:+.2f}"
-                )
-            ),
-            (
-                "Sharpe Proxy",
-                (
-                    f"{statistics['sharpe_proxy']:.2f}"
-                )
-            ),
-            (
-                "Max Drawdown",
-                (
-                    f"{statistics['maximum_drawdown']:.2f}"
-                )
-            ),
-            (
-                "Profit Factor",
-                profit_factor_text
-            )
-        ]
 
         self._show_stats(
             row_2,
-            values_2
+            [
+                (
+                    "Avg Trade",
+                    (
+                        f"{statistics['average_trade']:+.2f}"
+                    )
+                ),
+                (
+                    "Best Trade",
+                    (
+                        f"{statistics['best_trade']:+.2f}"
+                    )
+                ),
+                (
+                    "Worst Trade",
+                    (
+                        f"{statistics['worst_trade']:+.2f}"
+                    )
+                ),
+                (
+                    "Sharpe Proxy",
+                    (
+                        f"{statistics['sharpe_proxy']:.2f}"
+                    )
+                ),
+                (
+                    "Max Drawdown",
+                    (
+                        f"{statistics['maximum_drawdown']:.2f}"
+                    )
+                )
+            ]
         )
 
         figure = (
             self._create_backtest_chart(
-                backtest_data,
+                results[
+                    "backtest_data"
+                ],
                 time_range
             )
         )
@@ -882,112 +862,59 @@ class SpreadView:
             )
         ).pack(
             anchor="w",
-            pady=(0, 5)
+            pady=(0, 6)
         )
 
-        row_1 = tk.Frame(
+        row = tk.Frame(
             container
         )
 
-        row_1.pack(
-            fill="x",
-            pady=(0, 5)
-        )
-
-        values = [
-            (
-                "Robustness",
-                results[
-                    "robustness_label"
-                ]
-            ),
-            (
-                "Configurations",
-                results[
-                    "total_combinations"
-                ]
-            ),
-            (
-                "Profitable",
-                (
-                    f"{results['profitable_percentage']:.1f}%"
-                )
-            ),
-            (
-                "Positive Sharpe",
-                (
-                    f"{results['positive_sharpe_percentage']:.1f}%"
-                )
-            ),
-            (
-                "Median PnL",
-                (
-                    f"{results['median_net_pnl']:+.2f}"
-                )
-            ),
-            (
-                "Median Sharpe",
-                (
-                    f"{results['median_sharpe']:.2f}"
-                )
-            )
-        ]
-
-        self._show_stats(
-            row_1,
-            values,
-            bold=True
-        )
-
-        robust = results[
-            "robust_configuration"
-        ]
-
-        row_2 = tk.Frame(
-            container
-        )
-
-        row_2.pack(
+        row.pack(
             fill="x",
             pady=(0, 7)
         )
 
-        values_2 = [
-            (
-                "Robust Window",
-                (
-                    f"{int(robust['Window'])}h"
-                )
-            ),
-            (
-                "Entry Z",
-                (
-                    f"{robust['EntryZ']:.1f}"
-                )
-            ),
-            (
-                "Avg Sharpe",
-                (
-                    f"{robust['AverageSharpe']:.2f}"
-                )
-            ),
-            (
-                "Avg PnL",
-                (
-                    f"{robust['AverageNetPnL']:+.2f}"
-                )
-            ),
-            (
-                "Profitable Share",
-                (
-                    f"{robust['ProfitableShare']:.1f}%"
-                )
-            )
-        ]
-
         self._show_stats(
-            row_2,
-            values_2
+            row,
+            [
+                (
+                    "Robustness",
+                    results[
+                        "robustness_label"
+                    ]
+                ),
+                (
+                    "Configurations",
+                    results[
+                        "total_combinations"
+                    ]
+                ),
+                (
+                    "Profitable",
+                    (
+                        f"{results['profitable_percentage']:.1f}%"
+                    )
+                ),
+                (
+                    "Positive Sharpe",
+                    (
+                        f"{results['positive_sharpe_percentage']:.1f}%"
+                    )
+                ),
+                (
+                    "Median PnL",
+                    (
+                        f"{results['median_net_pnl']:+.2f}"
+                    )
+                ),
+                (
+                    "Median Sharpe",
+                    (
+                        f"{results['median_sharpe']:.2f}"
+                    )
+                )
+            ],
+            bold=True
         )
 
         figure = (
@@ -1035,8 +962,7 @@ class SpreadView:
             signal_data[
                 "Spread"
             ],
-            label="DK1 - DK2 Spread",
-            linewidth=1.8
+            label="DK1 - DK2 Spread"
         )
 
         spread_axis.plot(
@@ -1097,17 +1023,13 @@ class SpreadView:
         z_axis.axhline(
             y=threshold,
             linestyle="--",
-            label=(
-                f"+{threshold:.1f}"
-            )
+            label=f"+{threshold:.1f}"
         )
 
         z_axis.axhline(
             y=-threshold,
             linestyle="--",
-            label=(
-                f"-{threshold:.1f}"
-            )
+            label=f"-{threshold:.1f}"
         )
 
         z_axis.axhline(
@@ -1225,7 +1147,7 @@ class SpreadView:
         )
 
         spread_axis.set_ylabel(
-            "Spread (EUR/MWh)"
+            "Spread"
         )
 
         spread_axis.grid(
@@ -1261,8 +1183,7 @@ class SpreadView:
             data[
                 "CumulativeNetPnL"
             ],
-            label="Net PnL",
-            linewidth=2
+            label="Net PnL"
         )
 
         pnl_axis.axhline(
@@ -1322,11 +1243,9 @@ class SpreadView:
             111
         )
 
-        heatmap_data = (
-            results[
-                "heatmap_data"
-            ]
-        )
+        heatmap_data = results[
+            "heatmap_data"
+        ]
 
         values = (
             heatmap_data.to_numpy(
@@ -1482,7 +1401,7 @@ class SpreadView:
                     f"{value}"
                 ),
                 font=font,
-                padx=9
+                padx=8
             ).pack(
                 side="left"
             )
