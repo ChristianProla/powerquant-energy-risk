@@ -17,6 +17,10 @@ from src.strategy.robustness import (
     StrategyRobustnessAnalyzer
 )
 
+from src.ui.out_of_sample_view import (
+    OutOfSampleView
+)
+
 
 class SpreadView:
 
@@ -40,6 +44,13 @@ class SpreadView:
             )
         )
 
+        self.out_of_sample_view = (
+            OutOfSampleView(
+                self.spread_analyzer,
+                self.backtester
+            )
+        )
+
     # ==================================================
     # Main page
     # ==================================================
@@ -55,10 +66,6 @@ class SpreadView:
         self._clear_frame(
             container
         )
-
-        # --------------------------------------------------
-        # Title
-        # --------------------------------------------------
 
         tk.Label(
             container,
@@ -79,9 +86,9 @@ class SpreadView:
         tk.Label(
             container,
             text=(
-                "Analyse spread signals, backtest "
-                "mean reversion and test strategy "
-                "robustness across parameter combinations."
+                "Analyse signals, backtest mean reversion, "
+                "test parameter robustness and validate "
+                "the strategy on unseen market data."
             ),
             font=(
                 "Arial",
@@ -93,7 +100,7 @@ class SpreadView:
         )
 
         # ==================================================
-        # Prepare spread data
+        # Spread data
         # ==================================================
 
         spread_data = (
@@ -117,7 +124,7 @@ class SpreadView:
             return
 
         # ==================================================
-        # Controls
+        # Strategy controls
         # ==================================================
 
         controls = tk.Frame(
@@ -128,10 +135,6 @@ class SpreadView:
             fill="x",
             pady=(0, 8)
         )
-
-        # --------------------------------------------------
-        # Rolling window
-        # --------------------------------------------------
 
         tk.Label(
             controls,
@@ -165,10 +168,6 @@ class SpreadView:
             padx=(5, 15)
         )
 
-        # --------------------------------------------------
-        # Entry threshold
-        # --------------------------------------------------
-
         tk.Label(
             controls,
             text="Entry Z:"
@@ -201,10 +200,6 @@ class SpreadView:
             padx=(5, 15)
         )
 
-        # --------------------------------------------------
-        # Exit threshold
-        # --------------------------------------------------
-
         tk.Label(
             controls,
             text="Exit Z:"
@@ -234,10 +229,6 @@ class SpreadView:
             side="left",
             padx=(5, 15)
         )
-
-        # --------------------------------------------------
-        # Cost
-        # --------------------------------------------------
 
         tk.Label(
             controls,
@@ -271,7 +262,7 @@ class SpreadView:
         )
 
         # ==================================================
-        # Buttons
+        # Navigation buttons
         # ==================================================
 
         button_frame = tk.Frame(
@@ -292,9 +283,9 @@ class SpreadView:
             expand=True
         )
 
-        # --------------------------------------------------
-        # Signal analysis
-        # --------------------------------------------------
+        # ==================================================
+        # Spread signal analysis
+        # ==================================================
 
         def run_signal_analysis():
 
@@ -336,9 +327,9 @@ class SpreadView:
                 time_range
             )
 
-        # --------------------------------------------------
-        # Standard backtest
-        # --------------------------------------------------
+        # ==================================================
+        # Backtest
+        # ==================================================
 
         def run_backtest():
 
@@ -403,9 +394,9 @@ class SpreadView:
                 time_range
             )
 
-        # --------------------------------------------------
-        # Robustness test
-        # --------------------------------------------------
+        # ==================================================
+        # Robustness
+        # ==================================================
 
         def run_robustness_test():
 
@@ -413,7 +404,7 @@ class SpreadView:
                 output_frame
             )
 
-            loading_label = tk.Label(
+            tk.Label(
                 output_frame,
                 text=(
                     "Testing 300 strategy "
@@ -424,9 +415,7 @@ class SpreadView:
                     10,
                     "bold"
                 )
-            )
-
-            loading_label.pack(
+            ).pack(
                 anchor="w",
                 pady=20
             )
@@ -464,6 +453,18 @@ class SpreadView:
             )
 
         # ==================================================
+        # Out-of-sample
+        # ==================================================
+
+        def run_out_of_sample():
+
+            self.out_of_sample_view.show(
+                output_frame,
+                spread_data,
+                time_range
+            )
+
+        # ==================================================
         # Buttons
         # ==================================================
 
@@ -475,9 +476,7 @@ class SpreadView:
                 10,
                 "bold"
             ),
-            command=(
-                run_signal_analysis
-            )
+            command=run_signal_analysis
         ).pack(
             side="left",
             padx=(0, 8)
@@ -485,15 +484,13 @@ class SpreadView:
 
         tk.Button(
             button_frame,
-            text="Run Strategy Backtest",
+            text="Strategy Backtest",
             font=(
                 "Arial",
                 10,
                 "bold"
             ),
-            command=(
-                run_backtest
-            )
+            command=run_backtest
         ).pack(
             side="left",
             padx=(0, 8)
@@ -507,9 +504,21 @@ class SpreadView:
                 10,
                 "bold"
             ),
-            command=(
-                run_robustness_test
-            )
+            command=run_robustness_test
+        ).pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        tk.Button(
+            button_frame,
+            text="Out-of-Sample Test",
+            font=(
+                "Arial",
+                10,
+                "bold"
+            ),
+            command=run_out_of_sample
         ).pack(
             side="left"
         )
@@ -704,7 +713,7 @@ class SpreadView:
             text=(
                 "Research backtest only. PnL is measured "
                 "in spread EUR/MWh and does not yet model "
-                "capital, margin or market execution constraints."
+                "capital, margin or execution constraints."
             ),
             font=(
                 "Arial",
@@ -837,164 +846,6 @@ class SpreadView:
             values_2
         )
 
-        settings_frame = tk.Frame(
-            container
-        )
-
-        settings_frame.pack(
-            fill="x",
-            pady=(0, 7)
-        )
-
-        settings = [
-            (
-                "Window",
-                (
-                    f"{window}h"
-                )
-            ),
-            (
-                "Entry",
-                (
-                    f"±{results['entry_threshold']:.2f}"
-                )
-            ),
-            (
-                "Exit",
-                (
-                    f"±{results['exit_threshold']:.2f}"
-                )
-            ),
-            (
-                "Cost / Leg",
-                (
-                    f"{results['transaction_cost_per_leg']:.2f}"
-                )
-            )
-        ]
-
-        self._show_stats(
-            settings_frame,
-            settings
-        )
-
-        # --------------------------------------------------
-        # Recent trades
-        # --------------------------------------------------
-
-        if not trades.empty:
-
-            tk.Label(
-                container,
-                text="Recent Trades",
-                font=(
-                    "Arial",
-                    9,
-                    "bold"
-                )
-            ).pack(
-                anchor="w"
-            )
-
-            trade_frame = tk.Frame(
-                container
-            )
-
-            trade_frame.pack(
-                fill="x",
-                pady=(0, 5)
-            )
-
-            recent_trades = (
-                trades.tail(
-                    4
-                )
-            )
-
-            headers = [
-                "Direction",
-                "Entry",
-                "Exit",
-                "Net PnL"
-            ]
-
-            widths = [
-                24,
-                12,
-                12,
-                12
-            ]
-
-            for (
-                column,
-                header
-            ) in enumerate(
-                headers
-            ):
-
-                tk.Label(
-                    trade_frame,
-                    text=header,
-                    font=(
-                        "Arial",
-                        8,
-                        "bold"
-                    ),
-                    width=widths[
-                        column
-                    ],
-                    anchor="w"
-                ).grid(
-                    row=0,
-                    column=column
-                )
-
-            for (
-                row_number,
-                (_, trade)
-            ) in enumerate(
-                recent_trades.iterrows(),
-                start=1
-            ):
-
-                values = [
-                    trade[
-                        "Direction"
-                    ],
-                    (
-                        f"{trade['EntrySpread']:+.2f}"
-                    ),
-                    (
-                        f"{trade['ExitSpread']:+.2f}"
-                    ),
-                    (
-                        f"{trade['NetPnL']:+.2f}"
-                    )
-                ]
-
-                for (
-                    column,
-                    value
-                ) in enumerate(
-                    values
-                ):
-
-                    tk.Label(
-                        trade_frame,
-                        text=value,
-                        font=(
-                            "Arial",
-                            8
-                        ),
-                        width=widths[
-                            column
-                        ],
-                        anchor="w"
-                    ).grid(
-                        row=row_number,
-                        column=column
-                    )
-
         figure = (
             self._create_backtest_chart(
                 backtest_data,
@@ -1008,7 +859,6 @@ class SpreadView:
         )
 
     # ==================================================
-    # NEW:
     # Robustness results
     # ==================================================
 
@@ -1032,29 +882,8 @@ class SpreadView:
             )
         ).pack(
             anchor="w",
-            pady=(0, 4)
+            pady=(0, 5)
         )
-
-        tk.Label(
-            container,
-            text=(
-                "The strategy is tested across 300 parameter "
-                "combinations. A robust strategy should perform "
-                "reasonably across a region of parameters, "
-                "not only one isolated configuration."
-            ),
-            font=(
-                "Arial",
-                9
-            )
-        ).pack(
-            anchor="w",
-            pady=(0, 7)
-        )
-
-        # ==================================================
-        # Overall robustness
-        # ==================================================
 
         row_1 = tk.Frame(
             container
@@ -1065,7 +894,7 @@ class SpreadView:
             pady=(0, 5)
         )
 
-        values_1 = [
+        values = [
             (
                 "Robustness",
                 results[
@@ -1074,9 +903,9 @@ class SpreadView:
             ),
             (
                 "Configurations",
-                (
-                    f"{results['total_combinations']}"
-                )
+                results[
+                    "total_combinations"
+                ]
             ),
             (
                 "Profitable",
@@ -1106,13 +935,9 @@ class SpreadView:
 
         self._show_stats(
             row_1,
-            values_1,
+            values,
             bold=True
         )
-
-        # ==================================================
-        # Most robust parameter region
-        # ==================================================
 
         robust = results[
             "robust_configuration"
@@ -1135,7 +960,7 @@ class SpreadView:
                 )
             ),
             (
-                "Robust Entry Z",
+                "Entry Z",
                 (
                     f"{robust['EntryZ']:.1f}"
                 )
@@ -1147,7 +972,7 @@ class SpreadView:
                 )
             ),
             (
-                "Avg Net PnL",
+                "Avg PnL",
                 (
                     f"{robust['AverageNetPnL']:+.2f}"
                 )
@@ -1157,12 +982,6 @@ class SpreadView:
                 (
                     f"{robust['ProfitableShare']:.1f}%"
                 )
-            ),
-            (
-                "Avg Trades",
-                (
-                    f"{robust['AverageTrades']:.1f}"
-                )
             )
         ]
 
@@ -1170,117 +989,6 @@ class SpreadView:
             row_2,
             values_2
         )
-
-        # ==================================================
-        # Best individual configuration
-        # ==================================================
-
-        best = results[
-            "best_configuration"
-        ]
-
-        tk.Label(
-            container,
-            text=(
-                "Best Individual Configuration "
-                "(not automatically the most robust)"
-            ),
-            font=(
-                "Arial",
-                9,
-                "bold"
-            )
-        ).pack(
-            anchor="w",
-            pady=(0, 3)
-        )
-
-        best_frame = tk.Frame(
-            container
-        )
-
-        best_frame.pack(
-            fill="x",
-            pady=(0, 7)
-        )
-
-        best_values = [
-            (
-                "Window",
-                (
-                    f"{int(best['Window'])}h"
-                )
-            ),
-            (
-                "Entry Z",
-                (
-                    f"{best['EntryZ']:.1f}"
-                )
-            ),
-            (
-                "Exit Z",
-                (
-                    f"{best['ExitZ']:.1f}"
-                )
-            ),
-            (
-                "Cost",
-                (
-                    f"{best['CostPerLeg']:.2f}"
-                )
-            ),
-            (
-                "Net PnL",
-                (
-                    f"{best['NetPnL']:+.2f}"
-                )
-            ),
-            (
-                "Sharpe",
-                (
-                    f"{best['SharpeProxy']:.2f}"
-                )
-            ),
-            (
-                "Trades",
-                (
-                    f"{int(best['Trades'])}"
-                )
-            )
-        ]
-
-        self._show_stats(
-            best_frame,
-            best_values
-        )
-
-        # ==================================================
-        # Top configurations table
-        # ==================================================
-
-        tk.Label(
-            container,
-            text="Top Parameter Combinations",
-            font=(
-                "Arial",
-                9,
-                "bold"
-            )
-        ).pack(
-            anchor="w",
-            pady=(0, 2)
-        )
-
-        self._create_robustness_table(
-            container,
-            results[
-                "top_configurations"
-            ]
-        )
-
-        # ==================================================
-        # Heatmap
-        # ==================================================
 
         figure = (
             self._create_robustness_chart(
@@ -1293,262 +1001,6 @@ class SpreadView:
             container,
             figure
         )
-
-    # ==================================================
-    # Robustness table
-    # ==================================================
-
-    def _create_robustness_table(
-        self,
-        container,
-        table
-    ):
-
-        table_frame = tk.Frame(
-            container
-        )
-
-        table_frame.pack(
-            fill="x",
-            pady=(0, 5)
-        )
-
-        columns = [
-            "Window",
-            "Entry",
-            "Exit",
-            "Cost",
-            "PnL",
-            "Sharpe",
-            "Trades",
-            "Win %"
-        ]
-
-        widths = [
-            8,
-            8,
-            8,
-            8,
-            11,
-            10,
-            8,
-            9
-        ]
-
-        for (
-            column_number,
-            column_name
-        ) in enumerate(
-            columns
-        ):
-
-            tk.Label(
-                table_frame,
-                text=column_name,
-                font=(
-                    "Arial",
-                    8,
-                    "bold"
-                ),
-                width=widths[
-                    column_number
-                ],
-                anchor="w"
-            ).grid(
-                row=0,
-                column=column_number
-            )
-
-        for (
-            row_number,
-            (_, row)
-        ) in enumerate(
-            table.head(
-                5
-            ).iterrows(),
-            start=1
-        ):
-
-            values = [
-                (
-                    f"{int(row['Window'])}h"
-                ),
-                (
-                    f"{row['EntryZ']:.1f}"
-                ),
-                (
-                    f"{row['ExitZ']:.1f}"
-                ),
-                (
-                    f"{row['CostPerLeg']:.2f}"
-                ),
-                (
-                    f"{row['NetPnL']:+.2f}"
-                ),
-                (
-                    f"{row['SharpeProxy']:.2f}"
-                ),
-                (
-                    f"{int(row['Trades'])}"
-                ),
-                (
-                    f"{row['WinRate']:.1f}%"
-                )
-            ]
-
-            for (
-                column_number,
-                value
-            ) in enumerate(
-                values
-            ):
-
-                tk.Label(
-                    table_frame,
-                    text=value,
-                    font=(
-                        "Arial",
-                        8
-                    ),
-                    width=widths[
-                        column_number
-                    ],
-                    anchor="w"
-                ).grid(
-                    row=row_number,
-                    column=column_number
-                )
-
-    # ==================================================
-    # Robustness chart
-    # ==================================================
-
-    def _create_robustness_chart(
-        self,
-        results,
-        time_range
-    ):
-
-        figure = Figure(
-            figsize=(
-                10,
-                4
-            ),
-            dpi=100
-        )
-
-        axis = figure.add_subplot(
-            111
-        )
-
-        heatmap_data = (
-            results[
-                "heatmap_data"
-            ]
-        )
-
-        values = (
-            heatmap_data.to_numpy(
-                dtype=float
-            )
-        )
-
-        image = axis.imshow(
-            values,
-            aspect="auto",
-            origin="lower"
-        )
-
-        axis.set_title(
-            (
-                "Average Sharpe Proxy Across "
-                f"Parameter Regions - {time_range}"
-            )
-        )
-
-        axis.set_xlabel(
-            "Entry Z-Score"
-        )
-
-        axis.set_ylabel(
-            "Rolling Window"
-        )
-
-        axis.set_xticks(
-            range(
-                len(
-                    heatmap_data.columns
-                )
-            )
-        )
-
-        axis.set_xticklabels(
-            [
-                f"{value:.1f}"
-                for value
-                in heatmap_data.columns
-            ]
-        )
-
-        axis.set_yticks(
-            range(
-                len(
-                    heatmap_data.index
-                )
-            )
-        )
-
-        axis.set_yticklabels(
-            [
-                f"{int(value)}h"
-                for value
-                in heatmap_data.index
-            ]
-        )
-
-        # --------------------------------------------------
-        # Display values inside cells
-        # --------------------------------------------------
-
-        for row_index in range(
-            values.shape[
-                0
-            ]
-        ):
-
-            for column_index in range(
-                values.shape[
-                    1
-                ]
-            ):
-
-                value = values[
-                    row_index,
-                    column_index
-                ]
-
-                if not np.isnan(
-                    value
-                ):
-
-                    axis.text(
-                        column_index,
-                        row_index,
-                        f"{value:.2f}",
-                        ha="center",
-                        va="center",
-                        fontsize=8
-                    )
-
-        figure.colorbar(
-            image,
-            ax=axis,
-            label="Average Sharpe Proxy"
-        )
-
-        figure.tight_layout()
-
-        return figure
 
     # ==================================================
     # Signal chart
@@ -1849,7 +1301,134 @@ class SpreadView:
         return figure
 
     # ==================================================
-    # Date formatting
+    # Robustness heatmap
+    # ==================================================
+
+    def _create_robustness_chart(
+        self,
+        results,
+        time_range
+    ):
+
+        figure = Figure(
+            figsize=(
+                10,
+                4
+            ),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(
+            111
+        )
+
+        heatmap_data = (
+            results[
+                "heatmap_data"
+            ]
+        )
+
+        values = (
+            heatmap_data.to_numpy(
+                dtype=float
+            )
+        )
+
+        image = axis.imshow(
+            values,
+            aspect="auto",
+            origin="lower"
+        )
+
+        axis.set_title(
+            (
+                "Average Sharpe Proxy Across "
+                f"Parameter Regions - {time_range}"
+            )
+        )
+
+        axis.set_xlabel(
+            "Entry Z-Score"
+        )
+
+        axis.set_ylabel(
+            "Rolling Window"
+        )
+
+        axis.set_xticks(
+            range(
+                len(
+                    heatmap_data.columns
+                )
+            )
+        )
+
+        axis.set_xticklabels(
+            [
+                f"{value:.1f}"
+                for value
+                in heatmap_data.columns
+            ]
+        )
+
+        axis.set_yticks(
+            range(
+                len(
+                    heatmap_data.index
+                )
+            )
+        )
+
+        axis.set_yticklabels(
+            [
+                f"{int(value)}h"
+                for value
+                in heatmap_data.index
+            ]
+        )
+
+        for row_index in range(
+            values.shape[
+                0
+            ]
+        ):
+
+            for column_index in range(
+                values.shape[
+                    1
+                ]
+            ):
+
+                value = values[
+                    row_index,
+                    column_index
+                ]
+
+                if not np.isnan(
+                    value
+                ):
+
+                    axis.text(
+                        column_index,
+                        row_index,
+                        f"{value:.2f}",
+                        ha="center",
+                        va="center",
+                        fontsize=8
+                    )
+
+        figure.colorbar(
+            image,
+            ax=axis,
+            label="Average Sharpe Proxy"
+        )
+
+        figure.tight_layout()
+
+        return figure
+
+    # ==================================================
+    # Helpers
     # ==================================================
 
     def _format_dates(
@@ -1875,10 +1454,6 @@ class SpreadView:
             formatter
         )
 
-    # ==================================================
-    # Stats
-    # ==================================================
-
     def _show_stats(
         self,
         container,
@@ -1891,20 +1466,14 @@ class SpreadView:
             value
         ) in values:
 
-            if bold:
-
-                font = (
-                    "Arial",
-                    9,
-                    "bold"
-                )
-
-            else:
-
-                font = (
-                    "Arial",
-                    9
-                )
+            font = (
+                "Arial",
+                9,
+                "bold"
+            ) if bold else (
+                "Arial",
+                9
+            )
 
             tk.Label(
                 container,
@@ -1917,10 +1486,6 @@ class SpreadView:
             ).pack(
                 side="left"
             )
-
-    # ==================================================
-    # Chart
-    # ==================================================
 
     def _embed_chart(
         self,
@@ -1942,10 +1507,6 @@ class SpreadView:
             expand=True
         )
 
-    # ==================================================
-    # Error
-    # ==================================================
-
     def _show_error(
         self,
         container,
@@ -1964,10 +1525,6 @@ class SpreadView:
             anchor="w",
             pady=30
         )
-
-    # ==================================================
-    # Clear
-    # ==================================================
 
     def _clear_frame(
         self,
