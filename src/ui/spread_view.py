@@ -8,6 +8,10 @@ from matplotlib.backends.backend_tkagg import (
     FigureCanvasTkAgg
 )
 
+from src.strategy.backtesting import (
+    SpreadBacktester
+)
+
 
 class SpreadView:
 
@@ -18,6 +22,10 @@ class SpreadView:
 
         self.spread_analyzer = (
             spread_analyzer
+        )
+
+        self.backtester = (
+            SpreadBacktester()
         )
 
     # ==================================================
@@ -44,7 +52,7 @@ class SpreadView:
             container,
             text=(
                 "DK1 / DK2 Spread "
-                "& Trading Signals"
+                "& Strategy Research"
             ),
             font=(
                 "Arial",
@@ -59,9 +67,9 @@ class SpreadView:
         tk.Label(
             container,
             text=(
-                "Analyse relative electricity prices "
-                "between DK1 and DK2 using rolling "
-                "spread statistics and z-score signals."
+                "Analyse DK1/DK2 spread signals "
+                "and backtest a market-neutral "
+                "mean-reversion strategy."
             ),
             font=(
                 "Arial",
@@ -73,7 +81,7 @@ class SpreadView:
         )
 
         # ==================================================
-        # Prepare spread
+        # Prepare spread data
         # ==================================================
 
         spread_data = (
@@ -86,20 +94,12 @@ class SpreadView:
 
         if spread_data.empty:
 
-            tk.Label(
+            self._show_error(
                 container,
-                text=(
+                (
                     "Not enough matching DK1 "
                     "and DK2 price observations."
-                ),
-                font=(
-                    "Arial",
-                    11,
-                    "bold"
                 )
-            ).pack(
-                anchor="w",
-                pady=30
             )
 
             return
@@ -114,12 +114,16 @@ class SpreadView:
 
         controls.pack(
             fill="x",
-            pady=(0, 10)
+            pady=(0, 8)
         )
+
+        # --------------------------------------------------
+        # Rolling window
+        # --------------------------------------------------
 
         tk.Label(
             controls,
-            text="Rolling Window:"
+            text="Window:"
         ).pack(
             side="left"
         )
@@ -143,20 +147,24 @@ class SpreadView:
                 "168"
             ],
             state="readonly",
-            width=7
+            width=6
         ).pack(
             side="left",
-            padx=(5, 20)
+            padx=(5, 15)
         )
+
+        # --------------------------------------------------
+        # Entry threshold
+        # --------------------------------------------------
 
         tk.Label(
             controls,
-            text="Signal Threshold:"
+            text="Entry Z:"
         ).pack(
             side="left"
         )
 
-        threshold_variable = (
+        entry_threshold_variable = (
             tk.StringVar(
                 value="2.0"
             )
@@ -165,7 +173,7 @@ class SpreadView:
         ttk.Combobox(
             controls,
             textvariable=(
-                threshold_variable
+                entry_threshold_variable
             ),
             values=[
                 "1.0",
@@ -175,10 +183,95 @@ class SpreadView:
                 "3.0"
             ],
             state="readonly",
-            width=7
+            width=6
         ).pack(
             side="left",
-            padx=(5, 20)
+            padx=(5, 15)
+        )
+
+        # --------------------------------------------------
+        # Exit threshold
+        # --------------------------------------------------
+
+        tk.Label(
+            controls,
+            text="Exit Z:"
+        ).pack(
+            side="left"
+        )
+
+        exit_threshold_variable = (
+            tk.StringVar(
+                value="0.0"
+            )
+        )
+
+        ttk.Combobox(
+            controls,
+            textvariable=(
+                exit_threshold_variable
+            ),
+            values=[
+                "0.0",
+                "0.25",
+                "0.5",
+                "0.75",
+                "1.0"
+            ],
+            state="readonly",
+            width=6
+        ).pack(
+            side="left",
+            padx=(5, 15)
+        )
+
+        # --------------------------------------------------
+        # Transaction cost
+        # --------------------------------------------------
+
+        tk.Label(
+            controls,
+            text="Cost / Leg:"
+        ).pack(
+            side="left"
+        )
+
+        cost_variable = (
+            tk.StringVar(
+                value="0.25"
+            )
+        )
+
+        ttk.Combobox(
+            controls,
+            textvariable=(
+                cost_variable
+            ),
+            values=[
+                "0.00",
+                "0.10",
+                "0.25",
+                "0.50",
+                "1.00"
+            ],
+            state="readonly",
+            width=6
+        ).pack(
+            side="left",
+            padx=(5, 15)
+        )
+
+        # ==================================================
+        # Buttons
+        # ==================================================
+
+        button_frame = tk.Frame(
+            container
+        )
+
+        button_frame.pack(
+            fill="x",
+            pady=(0, 8)
         )
 
         output_frame = tk.Frame(
@@ -190,11 +283,11 @@ class SpreadView:
             expand=True
         )
 
-        # ==================================================
-        # Run analysis
-        # ==================================================
+        # --------------------------------------------------
+        # Signal analysis
+        # --------------------------------------------------
 
-        def run_analysis():
+        def run_signal_analysis():
 
             self._clear_frame(
                 output_frame
@@ -205,7 +298,7 @@ class SpreadView:
             )
 
             threshold = float(
-                threshold_variable.get()
+                entry_threshold_variable.get()
             )
 
             signal_data = (
@@ -225,7 +318,7 @@ class SpreadView:
                 )
             )
 
-            self._show_results(
+            self._show_signal_results(
                 output_frame,
                 signal_data,
                 statistics,
@@ -234,28 +327,110 @@ class SpreadView:
                 time_range
             )
 
+        # --------------------------------------------------
+        # Backtest
+        # --------------------------------------------------
+
+        def run_backtest():
+
+            self._clear_frame(
+                output_frame
+            )
+
+            window = int(
+                window_variable.get()
+            )
+
+            entry_threshold = float(
+                entry_threshold_variable.get()
+            )
+
+            exit_threshold = float(
+                exit_threshold_variable.get()
+            )
+
+            transaction_cost = float(
+                cost_variable.get()
+            )
+
+            signal_data = (
+                self.spread_analyzer
+                .calculate_signals(
+                    spread_data,
+                    window=window,
+                    threshold=entry_threshold
+                )
+            )
+
+            results = (
+                self.backtester
+                .run_backtest(
+                    signal_data,
+                    entry_threshold=entry_threshold,
+                    exit_threshold=exit_threshold,
+                    transaction_cost_per_leg=transaction_cost
+                )
+            )
+
+            if not results[
+                "success"
+            ]:
+
+                self._show_error(
+                    output_frame,
+                    results[
+                        "message"
+                    ]
+                )
+
+                return
+
+            self._show_backtest_results(
+                output_frame,
+                results,
+                window,
+                time_range
+            )
+
         tk.Button(
-            controls,
-            text="Run Spread Analysis",
+            button_frame,
+            text="Spread Signals",
             font=(
                 "Arial",
                 10,
                 "bold"
             ),
             command=(
-                run_analysis
+                run_signal_analysis
+            )
+        ).pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        tk.Button(
+            button_frame,
+            text="Run Strategy Backtest",
+            font=(
+                "Arial",
+                10,
+                "bold"
+            ),
+            command=(
+                run_backtest
             )
         ).pack(
             side="left"
         )
 
-        run_analysis()
+        # Default
+        run_signal_analysis()
 
     # ==================================================
-    # Results
+    # Signal results
     # ==================================================
 
-    def _show_results(
+    def _show_signal_results(
         self,
         container,
         signal_data,
@@ -265,20 +440,29 @@ class SpreadView:
         time_range
     ):
 
-        # --------------------------------------------------
-        # Current market state
-        # --------------------------------------------------
-
-        stats_row_1 = tk.Frame(
-            container
-        )
-
-        stats_row_1.pack(
-            fill="x",
+        tk.Label(
+            container,
+            text="Spread Signal Analysis",
+            font=(
+                "Arial",
+                12,
+                "bold"
+            )
+        ).pack(
+            anchor="w",
             pady=(0, 6)
         )
 
-        row_1_values = [
+        row_1 = tk.Frame(
+            container
+        )
+
+        row_1.pack(
+            fill="x",
+            pady=(0, 5)
+        )
+
+        values_1 = [
             (
                 "Current Spread",
                 (
@@ -287,7 +471,7 @@ class SpreadView:
                 )
             ),
             (
-                "Current Z-Score",
+                "Current Z",
                 (
                     f"{statistics['current_z_score']:+.2f}"
                 )
@@ -301,112 +485,78 @@ class SpreadView:
             (
                 "Rolling Mean",
                 (
-                    f"{statistics['rolling_mean']:+.2f} "
-                    f"EUR/MWh"
+                    f"{statistics['rolling_mean']:+.2f}"
                 )
             ),
             (
-                "Spread Volatility",
+                "Rolling Std.",
                 (
-                    f"{statistics['rolling_std']:.2f} "
-                    f"EUR/MWh"
+                    f"{statistics['rolling_std']:.2f}"
                 )
             )
         ]
 
         self._show_stats(
-            stats_row_1,
-            row_1_values,
+            row_1,
+            values_1,
             bold=True
         )
 
-        # --------------------------------------------------
-        # Historical statistics
-        # --------------------------------------------------
-
-        stats_row_2 = tk.Frame(
+        row_2 = tk.Frame(
             container
         )
 
-        stats_row_2.pack(
+        row_2.pack(
             fill="x",
             pady=(0, 7)
         )
 
-        row_2_values = [
+        values_2 = [
             (
                 "Average Spread",
                 (
-                    f"{statistics['average_spread']:+.2f} "
-                    f"EUR/MWh"
+                    f"{statistics['average_spread']:+.2f}"
                 )
             ),
             (
                 "Maximum Spread",
                 (
-                    f"{statistics['maximum_spread']:+.2f} "
-                    f"EUR/MWh"
+                    f"{statistics['maximum_spread']:+.2f}"
                 )
             ),
             (
                 "Minimum Spread",
                 (
-                    f"{statistics['minimum_spread']:+.2f} "
-                    f"EUR/MWh"
+                    f"{statistics['minimum_spread']:+.2f}"
                 )
             ),
             (
                 "Upper Signals",
-                (
-                    f"{statistics['upper_signals']}"
-                )
+                statistics[
+                    "upper_signals"
+                ]
             ),
             (
                 "Lower Signals",
-                (
-                    f"{statistics['lower_signals']}"
-                )
+                statistics[
+                    "lower_signals"
+                ]
             ),
             (
                 "Total Signals",
-                (
-                    f"{statistics['total_signals']}"
-                )
+                statistics[
+                    "total_signals"
+                ]
             )
         ]
 
         self._show_stats(
-            stats_row_2,
-            row_2_values,
-            bold=False
+            row_2,
+            values_2
         )
-
-        # --------------------------------------------------
-        # Research explanation
-        # --------------------------------------------------
-
-        tk.Label(
-            container,
-            text=(
-                "Research signal only: a positive extreme "
-                "z-score means DK1 is expensive relative to DK2; "
-                "a negative extreme means DK1 is cheap relative to DK2."
-            ),
-            font=(
-                "Arial",
-                9
-            )
-        ).pack(
-            anchor="w",
-            pady=(0, 5)
-        )
-
-        # --------------------------------------------------
-        # Chart
-        # --------------------------------------------------
 
         figure = (
-            self._create_chart(
+            self._create_signal_chart(
                 signal_data,
                 window,
                 threshold,
@@ -414,23 +564,381 @@ class SpreadView:
             )
         )
 
-        canvas = FigureCanvasTkAgg(
-            figure,
-            master=container
-        )
-
-        canvas.draw()
-
-        canvas.get_tk_widget().pack(
-            fill="both",
-            expand=True
+        self._embed_chart(
+            container,
+            figure
         )
 
     # ==================================================
-    # Chart
+    # Backtest results
     # ==================================================
 
-    def _create_chart(
+    def _show_backtest_results(
+        self,
+        container,
+        results,
+        window,
+        time_range
+    ):
+
+        statistics = results[
+            "statistics"
+        ]
+
+        backtest_data = results[
+            "backtest_data"
+        ]
+
+        trades = results[
+            "trades"
+        ]
+
+        tk.Label(
+            container,
+            text="Mean-Reversion Strategy Backtest",
+            font=(
+                "Arial",
+                12,
+                "bold"
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 5)
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Research backtest only. "
+                "PnL is measured in spread EUR/MWh "
+                "and does not yet model capital, margin "
+                "or electricity-market execution constraints."
+            ),
+            font=(
+                "Arial",
+                9
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 7)
+        )
+
+        # --------------------------------------------------
+        # Performance row 1
+        # --------------------------------------------------
+
+        row_1 = tk.Frame(
+            container
+        )
+
+        row_1.pack(
+            fill="x",
+            pady=(0, 5)
+        )
+
+        values_1 = [
+            (
+                "Net PnL",
+                (
+                    f"{statistics['total_net_pnl']:+.2f} "
+                    f"EUR/MWh"
+                )
+            ),
+            (
+                "Gross PnL",
+                (
+                    f"{statistics['total_gross_pnl']:+.2f}"
+                )
+            ),
+            (
+                "Trading Costs",
+                (
+                    f"{statistics['total_transaction_cost']:.2f}"
+                )
+            ),
+            (
+                "Trades",
+                statistics[
+                    "number_of_trades"
+                ]
+            ),
+            (
+                "Win Rate",
+                (
+                    f"{statistics['win_rate']:.1f}%"
+                )
+            )
+        ]
+
+        self._show_stats(
+            row_1,
+            values_1,
+            bold=True
+        )
+
+        # --------------------------------------------------
+        # Performance row 2
+        # --------------------------------------------------
+
+        row_2 = tk.Frame(
+            container
+        )
+
+        row_2.pack(
+            fill="x",
+            pady=(0, 6)
+        )
+
+        profit_factor = (
+            statistics[
+                "profit_factor"
+            ]
+        )
+
+        if (
+            profit_factor
+            == float(
+                "inf"
+            )
+        ):
+
+            profit_factor_text = (
+                "∞"
+            )
+
+        else:
+
+            profit_factor_text = (
+                f"{profit_factor:.2f}"
+            )
+
+        values_2 = [
+            (
+                "Avg Trade",
+                (
+                    f"{statistics['average_trade']:+.2f}"
+                )
+            ),
+            (
+                "Best Trade",
+                (
+                    f"{statistics['best_trade']:+.2f}"
+                )
+            ),
+            (
+                "Worst Trade",
+                (
+                    f"{statistics['worst_trade']:+.2f}"
+                )
+            ),
+            (
+                "Sharpe Proxy",
+                (
+                    f"{statistics['sharpe_proxy']:.2f}"
+                )
+            ),
+            (
+                "Max Drawdown",
+                (
+                    f"{statistics['maximum_drawdown']:.2f}"
+                )
+            ),
+            (
+                "Profit Factor",
+                profit_factor_text
+            )
+        ]
+
+        self._show_stats(
+            row_2,
+            values_2
+        )
+
+        # --------------------------------------------------
+        # Strategy settings
+        # --------------------------------------------------
+
+        settings_frame = tk.Frame(
+            container
+        )
+
+        settings_frame.pack(
+            fill="x",
+            pady=(0, 7)
+        )
+
+        settings = [
+            (
+                "Rolling Window",
+                (
+                    f"{window} hours"
+                )
+            ),
+            (
+                "Entry Z",
+                (
+                    f"±{results['entry_threshold']:.2f}"
+                )
+            ),
+            (
+                "Exit Z",
+                (
+                    f"±{results['exit_threshold']:.2f}"
+                )
+            ),
+            (
+                "Cost / Leg",
+                (
+                    f"{results['transaction_cost_per_leg']:.2f} "
+                    f"EUR/MWh"
+                )
+            )
+        ]
+
+        self._show_stats(
+            settings_frame,
+            settings
+        )
+
+        # --------------------------------------------------
+        # Recent trades
+        # --------------------------------------------------
+
+        if not trades.empty:
+
+            tk.Label(
+                container,
+                text="Recent Trades",
+                font=(
+                    "Arial",
+                    9,
+                    "bold"
+                )
+            ).pack(
+                anchor="w",
+                pady=(0, 3)
+            )
+
+            trade_table = tk.Frame(
+                container
+            )
+
+            trade_table.pack(
+                fill="x",
+                pady=(0, 6)
+            )
+
+            columns = [
+                "Direction",
+                "Entry Spread",
+                "Exit Spread",
+                "Net PnL"
+            ]
+
+            widths = [
+                24,
+                13,
+                13,
+                12
+            ]
+
+            for (
+                column_index,
+                column_name
+            ) in enumerate(
+                columns
+            ):
+
+                tk.Label(
+                    trade_table,
+                    text=column_name,
+                    font=(
+                        "Arial",
+                        8,
+                        "bold"
+                    ),
+                    width=widths[
+                        column_index
+                    ],
+                    anchor="w"
+                ).grid(
+                    row=0,
+                    column=column_index
+                )
+
+            recent_trades = (
+                trades.tail(
+                    4
+                )
+            )
+
+            for (
+                row_number,
+                (_, trade)
+            ) in enumerate(
+                recent_trades.iterrows(),
+                start=1
+            ):
+
+                values = [
+                    trade[
+                        "Direction"
+                    ],
+                    (
+                        f"{trade['EntrySpread']:+.2f}"
+                    ),
+                    (
+                        f"{trade['ExitSpread']:+.2f}"
+                    ),
+                    (
+                        f"{trade['NetPnL']:+.2f}"
+                    )
+                ]
+
+                for (
+                    column_index,
+                    value
+                ) in enumerate(
+                    values
+                ):
+
+                    tk.Label(
+                        trade_table,
+                        text=value,
+                        font=(
+                            "Arial",
+                            8
+                        ),
+                        width=widths[
+                            column_index
+                        ],
+                        anchor="w"
+                    ).grid(
+                        row=row_number,
+                        column=column_index
+                    )
+
+        # --------------------------------------------------
+        # Backtest chart
+        # --------------------------------------------------
+
+        figure = (
+            self._create_backtest_chart(
+                backtest_data,
+                time_range
+            )
+        )
+
+        self._embed_chart(
+            container,
+            figure
+        )
+
+    # ==================================================
+    # Signal chart
+    # ==================================================
+
+    def _create_signal_chart(
         self,
         signal_data,
         window,
@@ -445,10 +953,6 @@ class SpreadView:
             ),
             dpi=100
         )
-
-        # ==================================================
-        # Spread chart
-        # ==================================================
 
         spread_axis = (
             figure.add_subplot(
@@ -489,13 +993,13 @@ class SpreadView:
 
         spread_axis.set_title(
             (
-                f"DK1 / DK2 Electricity Price Spread "
+                f"DK1 / DK2 Spread "
                 f"- {time_range}"
             )
         )
 
         spread_axis.set_ylabel(
-            "Spread (EUR/MWh)"
+            "EUR/MWh"
         )
 
         spread_axis.grid(
@@ -507,9 +1011,9 @@ class SpreadView:
             fontsize=8
         )
 
-        # ==================================================
-        # Z-score chart
-        # ==================================================
+        # --------------------------------------------------
+        # Z-score
+        # --------------------------------------------------
 
         z_axis = (
             figure.add_subplot(
@@ -524,8 +1028,23 @@ class SpreadView:
             signal_data[
                 "ZScore"
             ],
-            label="Spread Z-Score",
-            linewidth=1.8
+            label="Spread Z-Score"
+        )
+
+        z_axis.axhline(
+            y=threshold,
+            linestyle="--",
+            label=(
+                f"+{threshold:.1f}"
+            )
+        )
+
+        z_axis.axhline(
+            y=-threshold,
+            linestyle="--",
+            label=(
+                f"-{threshold:.1f}"
+            )
         )
 
         z_axis.axhline(
@@ -533,80 +1052,6 @@ class SpreadView:
             linewidth=1,
             alpha=0.5
         )
-
-        z_axis.axhline(
-            y=threshold,
-            linestyle="--",
-            linewidth=1.5,
-            label=(
-                f"+{threshold:.1f} Signal"
-            )
-        )
-
-        z_axis.axhline(
-            y=-threshold,
-            linestyle="--",
-            linewidth=1.5,
-            label=(
-                f"-{threshold:.1f} Signal"
-            )
-        )
-
-        # --------------------------------------------------
-        # Signal markers
-        # --------------------------------------------------
-
-        upper_signals = (
-            signal_data[
-                signal_data[
-                    "ZScore"
-                ]
-                >= threshold
-            ]
-        )
-
-        lower_signals = (
-            signal_data[
-                signal_data[
-                    "ZScore"
-                ]
-                <= -threshold
-            ]
-        )
-
-        if not (
-            upper_signals.empty
-        ):
-
-            z_axis.scatter(
-                upper_signals[
-                    "TimeDK"
-                ],
-                upper_signals[
-                    "ZScore"
-                ],
-                marker="v",
-                label=(
-                    "DK1 Expensive Signal"
-                )
-            )
-
-        if not (
-            lower_signals.empty
-        ):
-
-            z_axis.scatter(
-                lower_signals[
-                    "TimeDK"
-                ],
-                lower_signals[
-                    "ZScore"
-                ],
-                marker="^",
-                label=(
-                    "DK1 Cheap Signal"
-                )
-            )
 
         z_axis.set_ylabel(
             "Z-Score"
@@ -625,9 +1070,189 @@ class SpreadView:
             fontsize=8
         )
 
+        self._format_dates(
+            spread_axis
+        )
+
+        self._format_dates(
+            z_axis
+        )
+
+        figure.tight_layout()
+
+        return figure
+
+    # ==================================================
+    # Backtest chart
+    # ==================================================
+
+    def _create_backtest_chart(
+        self,
+        data,
+        time_range
+    ):
+
+        figure = Figure(
+            figsize=(
+                10,
+                4.5
+            ),
+            dpi=100
+        )
+
         # --------------------------------------------------
-        # Date formatting
+        # Spread + entries/exits
         # --------------------------------------------------
+
+        spread_axis = (
+            figure.add_subplot(
+                211
+            )
+        )
+
+        spread_axis.plot(
+            data[
+                "TimeDK"
+            ],
+            data[
+                "Spread"
+            ],
+            label="DK1 - DK2 Spread"
+        )
+
+        entries = data.dropna(
+            subset=[
+                "EntryMarker"
+            ]
+        )
+
+        exits = data.dropna(
+            subset=[
+                "ExitMarker"
+            ]
+        )
+
+        if not entries.empty:
+
+            spread_axis.scatter(
+                entries[
+                    "TimeDK"
+                ],
+                entries[
+                    "EntryMarker"
+                ],
+                marker="^",
+                label="Entry"
+            )
+
+        if not exits.empty:
+
+            spread_axis.scatter(
+                exits[
+                    "TimeDK"
+                ],
+                exits[
+                    "ExitMarker"
+                ],
+                marker="x",
+                label="Exit"
+            )
+
+        spread_axis.set_title(
+            (
+                f"Mean-Reversion Backtest "
+                f"- {time_range}"
+            )
+        )
+
+        spread_axis.set_ylabel(
+            "Spread (EUR/MWh)"
+        )
+
+        spread_axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        spread_axis.legend(
+            fontsize=8
+        )
+
+        # --------------------------------------------------
+        # Cumulative PnL
+        # --------------------------------------------------
+
+        pnl_axis = (
+            figure.add_subplot(
+                212
+            )
+        )
+
+        pnl_axis.plot(
+            data[
+                "TimeDK"
+            ],
+            data[
+                "CumulativeGrossPnL"
+            ],
+            label="Gross PnL",
+            linestyle="--"
+        )
+
+        pnl_axis.plot(
+            data[
+                "TimeDK"
+            ],
+            data[
+                "CumulativeNetPnL"
+            ],
+            label="Net PnL",
+            linewidth=2
+        )
+
+        pnl_axis.axhline(
+            y=0,
+            linewidth=1,
+            alpha=0.5
+        )
+
+        pnl_axis.set_ylabel(
+            "Cumulative PnL"
+        )
+
+        pnl_axis.set_xlabel(
+            "Time"
+        )
+
+        pnl_axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        pnl_axis.legend(
+            fontsize=8
+        )
+
+        self._format_dates(
+            spread_axis
+        )
+
+        self._format_dates(
+            pnl_axis
+        )
+
+        figure.tight_layout()
+
+        return figure
+
+    # ==================================================
+    # Date formatting
+    # ==================================================
+
+    def _format_dates(
+        self,
+        axis
+    ):
 
         locator = (
             mdates.AutoDateLocator()
@@ -639,28 +1264,16 @@ class SpreadView:
             )
         )
 
-        spread_axis.xaxis.set_major_locator(
+        axis.xaxis.set_major_locator(
             locator
         )
 
-        spread_axis.xaxis.set_major_formatter(
+        axis.xaxis.set_major_formatter(
             formatter
         )
-
-        z_axis.xaxis.set_major_locator(
-            locator
-        )
-
-        z_axis.xaxis.set_major_formatter(
-            formatter
-        )
-
-        figure.tight_layout()
-
-        return figure
 
     # ==================================================
-    # Stats helper
+    # Stats
     # ==================================================
 
     def _show_stats(
@@ -703,7 +1316,54 @@ class SpreadView:
             )
 
     # ==================================================
-    # Clear frame
+    # Chart
+    # ==================================================
+
+    def _embed_chart(
+        self,
+        container,
+        figure
+    ):
+
+        canvas = (
+            FigureCanvasTkAgg(
+                figure,
+                master=container
+            )
+        )
+
+        canvas.draw()
+
+        canvas.get_tk_widget().pack(
+            fill="both",
+            expand=True
+        )
+
+    # ==================================================
+    # Error
+    # ==================================================
+
+    def _show_error(
+        self,
+        container,
+        message
+    ):
+
+        tk.Label(
+            container,
+            text=message,
+            font=(
+                "Arial",
+                11,
+                "bold"
+            )
+        ).pack(
+            anchor="w",
+            pady=30
+        )
+
+    # ==================================================
+    # Clear
     # ==================================================
 
     def _clear_frame(
