@@ -25,6 +25,10 @@ from src.ui.walk_forward_view import (
     WalkForwardView
 )
 
+from src.ui.portfolio_simulation_view import (
+    PortfolioSimulationView
+)
+
 
 class SpreadView:
 
@@ -57,6 +61,13 @@ class SpreadView:
 
         self.walk_forward_view = (
             WalkForwardView(
+                self.spread_analyzer,
+                self.backtester
+            )
+        )
+
+        self.portfolio_simulation_view = (
+            PortfolioSimulationView(
                 self.spread_analyzer,
                 self.backtester
             )
@@ -98,8 +109,8 @@ class SpreadView:
             container,
             text=(
                 "Analyse spread signals, backtest mean reversion, "
-                "test robustness and validate the strategy "
-                "on unseen market data."
+                "validate out-of-sample performance and simulate "
+                "capital-based portfolio risk."
             ),
             font=(
                 "Arial",
@@ -295,7 +306,7 @@ class SpreadView:
         )
 
         # ==================================================
-        # Signal analysis
+        # Spread signals
         # ==================================================
 
         def run_signal_analysis():
@@ -377,12 +388,8 @@ class SpreadView:
                 self.backtester
                 .run_backtest(
                     signal_data,
-                    entry_threshold=(
-                        entry_threshold
-                    ),
-                    exit_threshold=(
-                        exit_threshold
-                    ),
+                    entry_threshold=entry_threshold,
+                    exit_threshold=exit_threshold,
                     transaction_cost_per_leg=(
                         transaction_cost
                     )
@@ -492,6 +499,30 @@ class SpreadView:
             )
 
         # ==================================================
+        # Portfolio simulation
+        # ==================================================
+
+        def run_portfolio_simulation():
+
+            self.portfolio_simulation_view.show(
+                output_frame,
+                spread_data,
+                time_range,
+                window=int(
+                    window_variable.get()
+                ),
+                entry_threshold=float(
+                    entry_threshold_variable.get()
+                ),
+                exit_threshold=float(
+                    exit_threshold_variable.get()
+                ),
+                transaction_cost=float(
+                    cost_variable.get()
+                )
+            )
+
+        # ==================================================
         # Buttons
         # ==================================================
 
@@ -500,13 +531,13 @@ class SpreadView:
             text="Spread Signals",
             font=(
                 "Arial",
-                9,
+                8,
                 "bold"
             ),
             command=run_signal_analysis
         ).pack(
             side="left",
-            padx=(0, 6)
+            padx=(0, 5)
         )
 
         tk.Button(
@@ -514,13 +545,13 @@ class SpreadView:
             text="Strategy Backtest",
             font=(
                 "Arial",
-                9,
+                8,
                 "bold"
             ),
             command=run_backtest
         ).pack(
             side="left",
-            padx=(0, 6)
+            padx=(0, 5)
         )
 
         tk.Button(
@@ -528,38 +559,52 @@ class SpreadView:
             text="Robustness Test",
             font=(
                 "Arial",
-                9,
+                8,
                 "bold"
             ),
             command=run_robustness_test
         ).pack(
             side="left",
-            padx=(0, 6)
+            padx=(0, 5)
         )
 
         tk.Button(
             button_frame,
-            text="Out-of-Sample Test",
+            text="Out-of-Sample",
             font=(
                 "Arial",
-                9,
+                8,
                 "bold"
             ),
             command=run_out_of_sample
         ).pack(
             side="left",
-            padx=(0, 6)
+            padx=(0, 5)
         )
 
         tk.Button(
             button_frame,
-            text="Walk-Forward Test",
+            text="Walk-Forward",
             font=(
                 "Arial",
-                9,
+                8,
                 "bold"
             ),
             command=run_walk_forward
+        ).pack(
+            side="left",
+            padx=(0, 5)
+        )
+
+        tk.Button(
+            button_frame,
+            text="Portfolio Simulation",
+            font=(
+                "Arial",
+                8,
+                "bold"
+            ),
+            command=run_portfolio_simulation
         ).pack(
             side="left"
         )
@@ -722,7 +767,10 @@ class SpreadView:
 
         tk.Label(
             container,
-            text="Mean-Reversion Strategy Backtest",
+            text=(
+                "Mean-Reversion "
+                "Strategy Backtest"
+            ),
             font=(
                 "Arial",
                 12,
@@ -973,7 +1021,8 @@ class SpreadView:
                 "RollingMean"
             ],
             label=(
-                f"{window}-Hour Rolling Mean"
+                f"{window}-Hour "
+                f"Rolling Mean"
             ),
             linestyle="--"
         )
@@ -1023,13 +1072,17 @@ class SpreadView:
         z_axis.axhline(
             y=threshold,
             linestyle="--",
-            label=f"+{threshold:.1f}"
+            label=(
+                f"+{threshold:.1f}"
+            )
         )
 
         z_axis.axhline(
             y=-threshold,
             linestyle="--",
-            label=f"-{threshold:.1f}"
+            label=(
+                f"-{threshold:.1f}"
+            )
         )
 
         z_axis.axhline(
@@ -1243,9 +1296,11 @@ class SpreadView:
             111
         )
 
-        heatmap_data = results[
-            "heatmap_data"
-        ]
+        heatmap_data = (
+            results[
+                "heatmap_data"
+            ]
+        )
 
         values = (
             heatmap_data.to_numpy(
