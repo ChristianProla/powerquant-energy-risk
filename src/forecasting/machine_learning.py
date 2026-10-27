@@ -20,13 +20,21 @@ from sklearn.model_selection import (
     TimeSeriesSplit
 )
 
+from src.api.weather_api import (
+    WeatherAPI
+)
+
 
 class MachineLearningForecaster:
 
     def __init__(self):
 
+        self.weather_api = (
+            WeatherAPI()
+        )
+
         # ==================================================
-        # Feature groups
+        # Historical feature groups
         # ==================================================
 
         self.price_features = [
@@ -91,8 +99,108 @@ class MachineLearningForecaster:
                 )
         }
 
+        # ==================================================
+        # Forward forecasting features
+        #
+        # Important:
+        # We do NOT use future electricity demand
+        # or future wind-generation observations here,
+        # because they are not known at forecast time.
+        #
+        # Instead we use:
+        # - historical prices
+        # - target-hour calendar
+        # - future weather forecast
+        # ==================================================
+
+        self.forward_feature_columns = [
+            "DayAheadPriceEUR",
+            "PriceLag1",
+            "PriceLag2",
+            "PriceLag24",
+            "PriceMovingAverage6",
+            "PriceMovingAverage24",
+            "PriceVolatility24",
+            "TargetTemperatureC",
+            "TargetWeatherWindSpeedMS",
+            "TargetCloudCoverPct",
+            "TargetPrecipitationMM",
+            "TargetHourOfDay",
+            "TargetDayOfWeek",
+            "TargetMonth",
+            "TargetIsWeekend"
+        ]
+
     # ==================================================
-    # Prepare model data
+    # Create model
+    # ==================================================
+
+    def _create_model(
+        self,
+        model_name,
+        random_state=42
+    ):
+
+        if (
+            model_name
+            == "Linear Regression"
+        ):
+
+            return (
+                LinearRegression()
+            )
+
+        if (
+            model_name
+            == "Gradient Boosting"
+        ):
+
+            return (
+                GradientBoostingRegressor(
+                    n_estimators=200,
+                    learning_rate=0.05,
+                    max_depth=3,
+                    random_state=random_state
+                )
+            )
+
+        return (
+            RandomForestRegressor(
+                n_estimators=300,
+                max_depth=12,
+                min_samples_leaf=2,
+                random_state=random_state,
+                n_jobs=-1
+            )
+        )
+
+    def _create_models(
+        self,
+        random_state=42
+    ):
+
+        return {
+            "Linear Regression":
+                self._create_model(
+                    "Linear Regression",
+                    random_state
+                ),
+
+            "Random Forest":
+                self._create_model(
+                    "Random Forest",
+                    random_state
+                ),
+
+            "Gradient Boosting":
+                self._create_model(
+                    "Gradient Boosting",
+                    random_state
+                )
+        }
+
+    # ==================================================
+    # Prepare historical model data
     # ==================================================
 
     def _prepare_model_data(
@@ -126,19 +234,14 @@ class MachineLearningForecaster:
                 )
             )
 
-        # --------------------------------------------------
-        # Target:
-        #
-        # Features at time t
-        # predict electricity price at time t + 1
-        # --------------------------------------------------
-
         data[
             "NextPrice"
         ] = (
             data[
                 "DayAheadPriceEUR"
-            ].shift(-1)
+            ].shift(
+                -1
+            )
         )
 
         data = data.replace(
@@ -164,9 +267,12 @@ class MachineLearningForecaster:
             )
         )
 
-        if len(
-            model_data
-        ) < 40:
+        if (
+            len(
+                model_data
+            )
+            < 40
+        ):
 
             return None, (
                 "Not enough complete observations "
@@ -178,72 +284,6 @@ class MachineLearningForecaster:
             model_data,
             None
         )
-
-    # ==================================================
-    # Create one model
-    # ==================================================
-
-    def _create_model(
-        self,
-        model_name,
-        random_state=42
-    ):
-
-        if (
-            model_name
-            == "Linear Regression"
-        ):
-
-            return LinearRegression()
-
-        if (
-            model_name
-            == "Gradient Boosting"
-        ):
-
-            return GradientBoostingRegressor(
-                n_estimators=200,
-                learning_rate=0.05,
-                max_depth=3,
-                random_state=random_state
-            )
-
-        return RandomForestRegressor(
-            n_estimators=300,
-            max_depth=12,
-            min_samples_leaf=2,
-            random_state=random_state,
-            n_jobs=-1
-        )
-
-    # ==================================================
-    # Create all models
-    # ==================================================
-
-    def _create_models(
-        self,
-        random_state=42
-    ):
-
-        return {
-            "Linear Regression":
-                self._create_model(
-                    "Linear Regression",
-                    random_state
-                ),
-
-            "Random Forest":
-                self._create_model(
-                    "Random Forest",
-                    random_state
-                ),
-
-            "Gradient Boosting":
-                self._create_model(
-                    "Gradient Boosting",
-                    random_state
-                )
-        }
 
     # ==================================================
     # Standard model comparison
@@ -264,10 +304,15 @@ class MachineLearningForecaster:
             self.feature_columns
         )
 
-        if error_message is not None:
+        if (
+            error_message
+            is not None
+        ):
 
-            return self._empty_comparison_result(
-                error_message
+            return (
+                self._empty_comparison_result(
+                    error_message
+                )
             )
 
         X = model_data[
@@ -282,33 +327,42 @@ class MachineLearningForecaster:
             "TimeDK"
         ]
 
-        maximum_splits = (
-            len(model_data)
-            - 1
+        n_splits = self._safe_splits(
+            len(
+                model_data
+            ),
+            n_splits
         )
 
-        n_splits = min(
-            n_splits,
-            maximum_splits
-        )
+        if (
+            n_splits
+            < 2
+        ):
 
-        if n_splits < 2:
-
-            return self._empty_comparison_result(
-                "Not enough data for time-series validation."
+            return (
+                self._empty_comparison_result(
+                    "Not enough data for time-series validation."
+                )
             )
 
-        time_series_split = (
+        splitter = (
             TimeSeriesSplit(
                 n_splits=n_splits
             )
         )
 
-        model_predictions = {
-            "Naive Baseline": [],
-            "Linear Regression": [],
-            "Random Forest": [],
-            "Gradient Boosting": []
+        predictions_store = {
+            "Naive Baseline":
+                [],
+
+            "Linear Regression":
+                [],
+
+            "Random Forest":
+                [],
+
+            "Gradient Boosting":
+                []
         }
 
         actual_values = []
@@ -328,7 +382,7 @@ class MachineLearningForecaster:
                 test_index
             )
         ) in enumerate(
-            time_series_split.split(
+            splitter.split(
                 X
             ),
             start=1
@@ -354,33 +408,25 @@ class MachineLearningForecaster:
                 test_index
             ]
 
-            # --------------------------------------------------
-            # Naive baseline
-            # --------------------------------------------------
-
             baseline_predictions = (
                 X_test[
                     "DayAheadPriceEUR"
                 ].to_numpy()
             )
 
-            model_predictions[
+            predictions_store[
                 "Naive Baseline"
             ].extend(
                 baseline_predictions
             )
-
-            fold_scores = {}
-
-            # --------------------------------------------------
-            # ML models
-            # --------------------------------------------------
 
             models = (
                 self._create_models(
                     random_state
                 )
             )
+
+            fold_scores = {}
 
             for (
                 model_name,
@@ -398,7 +444,7 @@ class MachineLearningForecaster:
                     )
                 )
 
-                model_predictions[
+                predictions_store[
                     model_name
                 ].extend(
                     predictions
@@ -459,10 +505,6 @@ class MachineLearningForecaster:
                 test_times.to_numpy()
             )
 
-        # ==================================================
-        # Overall metrics
-        # ==================================================
-
         actual_values = np.array(
             actual_values
         )
@@ -473,12 +515,12 @@ class MachineLearningForecaster:
 
         comparison_rows = []
 
-        baseline_mae = None
+        baseline_mae = 0
 
         for (
             model_name,
             predictions
-        ) in model_predictions.items():
+        ) in predictions_store.items():
 
             predictions = np.array(
                 predictions
@@ -498,9 +540,12 @@ class MachineLearningForecaster:
                 )
             )
 
-            if len(
-                actual_values
-            ) >= 2:
+            if (
+                len(
+                    actual_values
+                )
+                >= 2
+            ):
 
                 r2 = (
                     r2_score(
@@ -548,26 +593,13 @@ class MachineLearningForecaster:
             comparison_table.iterrows()
         ):
 
-            if (
-                baseline_mae is not None
-                and
-                baseline_mae > 0
-            ):
-
-                improvement = (
-                    (
-                        baseline_mae
-                        - row["MAE"]
-                    )
-                    / baseline_mae
-                ) * 100
-
-            else:
-
-                improvement = 0
-
             improvements.append(
-                improvement
+                self._calculate_improvement(
+                    baseline_mae,
+                    row[
+                        "MAE"
+                    ]
+                )
             )
 
         comparison_table[
@@ -576,8 +608,7 @@ class MachineLearningForecaster:
 
         comparison_table = (
             comparison_table.sort_values(
-                by="MAE",
-                ascending=True
+                by="MAE"
             )
             .reset_index(
                 drop=True
@@ -587,16 +618,18 @@ class MachineLearningForecaster:
         best_model_name = (
             comparison_table.iloc[
                 0
-            ]["Model"]
+            ][
+                "Model"
+            ]
         )
 
         # ==================================================
-        # Final model training
+        # Final models
         # ==================================================
 
         fitted_models = {}
 
-        final_models = (
+        models = (
             self._create_models(
                 random_state
             )
@@ -605,7 +638,7 @@ class MachineLearningForecaster:
         for (
             model_name,
             model
-        ) in final_models.items():
+        ) in models.items():
 
             model.fit(
                 X,
@@ -616,103 +649,76 @@ class MachineLearningForecaster:
                 model_name
             ] = model
 
-        # ==================================================
-        # Next prediction
-        # ==================================================
-
-        prediction_data = (
-            feature_dataframe
-            .replace(
-                [
-                    np.inf,
-                    -np.inf
-                ],
-                np.nan
-            )
-            .dropna(
-                subset=self.feature_columns
-            )
+        current_price = (
+            model_data[
+                "DayAheadPriceEUR"
+            ].iloc[
+                -1
+            ]
         )
 
-        current_price = 0
-        next_price_prediction = 0
-        predicted_change = 0
-        predicted_change_percent = 0
+        if (
+            best_model_name
+            == "Naive Baseline"
+        ):
 
-        if not prediction_data.empty:
+            next_price_prediction = (
+                current_price
+            )
 
-            latest_row = (
-                prediction_data.iloc[
+            feature_importance = (
+                pd.DataFrame()
+            )
+
+        else:
+
+            best_model = (
+                fitted_models[
+                    best_model_name
+                ]
+            )
+
+            latest_features = (
+                model_data[
+                    self.feature_columns
+                ].iloc[
                     [-1]
                 ]
             )
 
-            current_price = (
-                latest_row[
-                    "DayAheadPriceEUR"
-                ].iloc[0]
+            next_price_prediction = (
+                best_model.predict(
+                    latest_features
+                )[0]
             )
 
-            latest_features = (
-                latest_row[
+            feature_importance = (
+                self._feature_importance_from_model(
+                    best_model,
                     self.feature_columns
-                ]
+                )
             )
 
-            if (
-                best_model_name
-                == "Naive Baseline"
-            ):
+        predicted_change = (
+            next_price_prediction
+            - current_price
+        )
 
-                next_price_prediction = (
+        if (
+            current_price
+            != 0
+        ):
+
+            predicted_change_percent = (
+                predicted_change
+                / abs(
                     current_price
                 )
+            ) * 100
 
-            else:
+        else:
 
-                best_model = (
-                    fitted_models[
-                        best_model_name
-                    ]
-                )
-
-                next_price_prediction = (
-                    best_model.predict(
-                        latest_features
-                    )[0]
-                )
-
-            predicted_change = (
-                next_price_prediction
-                - current_price
-            )
-
-            if current_price != 0:
-
-                predicted_change_percent = (
-                    predicted_change
-                    / abs(
-                        current_price
-                    )
-                ) * 100
-
-        # ==================================================
-        # Feature importance
-        # ==================================================
-
-        feature_importance = (
-            self._calculate_feature_importance(
-                fitted_models,
-                best_model_name,
-                self.feature_columns
-            )
-        )
-
-        best_predictions = np.array(
-            model_predictions[
-                best_model_name
-            ]
-        )
+            predicted_change_percent = 0
 
         return {
             "success":
@@ -743,7 +749,11 @@ class MachineLearningForecaster:
                 actual_values,
 
             "best_predictions":
-                best_predictions,
+                np.array(
+                    predictions_store[
+                        best_model_name
+                    ]
+                ),
 
             "prediction_times":
                 prediction_times,
@@ -771,7 +781,7 @@ class MachineLearningForecaster:
         }
 
     # ==================================================
-    # Feature ablation testing
+    # Feature ablation
     # ==================================================
 
     def compare_feature_sets(
@@ -782,20 +792,6 @@ class MachineLearningForecaster:
         random_state=42
     ):
 
-        if feature_dataframe.empty:
-
-            return self._empty_ablation_result(
-                "No feature data available."
-            )
-
-        # --------------------------------------------------
-        # To make the comparison fair, use only rows that
-        # are complete for the FULL feature set.
-        #
-        # Otherwise Price History might get more observations
-        # than the Weather model.
-        # --------------------------------------------------
-
         (
             full_model_data,
             error_message
@@ -804,26 +800,33 @@ class MachineLearningForecaster:
             self.feature_columns
         )
 
-        if error_message is not None:
+        if (
+            error_message
+            is not None
+        ):
 
-            return self._empty_ablation_result(
-                error_message
+            return (
+                self._empty_ablation_result(
+                    error_message
+                )
             )
 
-        maximum_splits = (
-            len(full_model_data)
-            - 1
+        n_splits = self._safe_splits(
+            len(
+                full_model_data
+            ),
+            n_splits
         )
 
-        n_splits = min(
-            n_splits,
-            maximum_splits
-        )
+        if (
+            n_splits
+            < 2
+        ):
 
-        if n_splits < 2:
-
-            return self._empty_ablation_result(
-                "Not enough data for feature ablation testing."
+            return (
+                self._empty_ablation_result(
+                    "Not enough data for feature ablation testing."
+                )
             )
 
         y = full_model_data[
@@ -834,19 +837,14 @@ class MachineLearningForecaster:
             "TimeDK"
         ]
 
-        time_series_split = (
+        splitter = (
             TimeSeriesSplit(
                 n_splits=n_splits
             )
         )
 
-        # --------------------------------------------------
-        # Create the exact same folds once.
-        # Every feature set will use these folds.
-        # --------------------------------------------------
-
         folds = list(
-            time_series_split.split(
+            splitter.split(
                 full_model_data
             )
         )
@@ -858,10 +856,6 @@ class MachineLearningForecaster:
         actual_values = None
 
         prediction_times = None
-
-        # ==================================================
-        # Test each feature set
-        # ==================================================
 
         for (
             feature_set_name,
@@ -901,12 +895,6 @@ class MachineLearningForecaster:
                     test_index
                 ]
 
-                test_times = (
-                    times.iloc[
-                        test_index
-                    ]
-                )
-
                 model = (
                     self._create_model(
                         model_name,
@@ -934,7 +922,9 @@ class MachineLearningForecaster:
                 )
 
                 all_times.extend(
-                    test_times.to_numpy()
+                    times.iloc[
+                        test_index
+                    ].to_numpy()
                 )
 
                 fold_mae_values.append(
@@ -970,9 +960,12 @@ class MachineLearningForecaster:
                 )
             )
 
-            if len(
-                all_actual
-            ) >= 2:
+            if (
+                len(
+                    all_actual
+                )
+                >= 2
+            ):
 
                 r2 = (
                     r2_score(
@@ -984,14 +977,6 @@ class MachineLearningForecaster:
             else:
 
                 r2 = 0
-
-            fold_mae_mean = np.mean(
-                fold_mae_values
-            )
-
-            fold_mae_std = np.std(
-                fold_mae_values
-            )
 
             results.append(
                 {
@@ -1013,10 +998,14 @@ class MachineLearningForecaster:
                         r2,
 
                     "FoldMAEMean":
-                        fold_mae_mean,
+                        np.mean(
+                            fold_mae_values
+                        ),
 
                     "FoldMAEStd":
-                        fold_mae_std
+                        np.std(
+                            fold_mae_values
+                        )
                 }
             )
 
@@ -1024,7 +1013,10 @@ class MachineLearningForecaster:
                 feature_set_name
             ] = all_predictions
 
-            if actual_values is None:
+            if (
+                actual_values
+                is None
+            ):
 
                 actual_values = (
                     all_actual
@@ -1034,84 +1026,11 @@ class MachineLearningForecaster:
                     all_times
                 )
 
-        # ==================================================
-        # Build comparison table
-        # ==================================================
-
         comparison_table = (
             pd.DataFrame(
                 results
             )
         )
-
-        price_only_row = (
-            comparison_table[
-                comparison_table[
-                    "FeatureSet"
-                ]
-                == "Price History"
-            ]
-        )
-
-        if price_only_row.empty:
-
-            price_only_mae = 0
-
-        else:
-
-            price_only_mae = (
-                price_only_row.iloc[
-                    0
-                ]["MAE"]
-            )
-
-        improvement_values = []
-
-        for _, row in (
-            comparison_table.iterrows()
-        ):
-
-            if price_only_mae > 0:
-
-                improvement = (
-                    (
-                        price_only_mae
-                        - row["MAE"]
-                    )
-                    / price_only_mae
-                ) * 100
-
-            else:
-
-                improvement = 0
-
-            improvement_values.append(
-                improvement
-            )
-
-        comparison_table[
-            "ImprovementVsPriceOnly"
-        ] = improvement_values
-
-        comparison_table = (
-            comparison_table.sort_values(
-                by="MAE",
-                ascending=True
-            )
-            .reset_index(
-                drop=True
-            )
-        )
-
-        best_feature_set = (
-            comparison_table.iloc[
-                0
-            ]["FeatureSet"]
-        )
-
-        # ==================================================
-        # Incremental market and weather value
-        # ==================================================
 
         price_mae = (
             self._get_feature_set_metric(
@@ -1137,40 +1056,42 @@ class MachineLearningForecaster:
             )
         )
 
-        market_improvement = (
-            self._calculate_improvement(
-                price_mae,
-                market_mae
+        comparison_table[
+            "ImprovementVsPriceOnly"
+        ] = (
+            comparison_table[
+                "MAE"
+            ].apply(
+                lambda value:
+                self._calculate_improvement(
+                    price_mae,
+                    value
+                )
             )
         )
 
-        weather_improvement_vs_price = (
-            self._calculate_improvement(
-                price_mae,
-                weather_mae
+        comparison_table = (
+            comparison_table.sort_values(
+                by="MAE"
+            )
+            .reset_index(
+                drop=True
             )
         )
 
-        weather_incremental_improvement = (
-            self._calculate_improvement(
-                market_mae,
-                weather_mae
-            )
+        best_feature_set = (
+            comparison_table.iloc[
+                0
+            ][
+                "FeatureSet"
+            ]
         )
 
-        # ==================================================
-        # Final best feature-set model
-        # ==================================================
-
-        best_feature_columns = (
+        best_features = (
             self.feature_sets[
                 best_feature_set
             ]
         )
-
-        X_best = full_model_data[
-            best_feature_columns
-        ]
 
         final_model = (
             self._create_model(
@@ -1180,78 +1101,57 @@ class MachineLearningForecaster:
         )
 
         final_model.fit(
-            X_best,
+            full_model_data[
+                best_features
+            ],
             y
         )
 
         feature_importance = (
             self._feature_importance_from_model(
                 final_model,
-                best_feature_columns
+                best_features
             )
         )
 
-        # ==================================================
-        # Next-price prediction
-        # ==================================================
-
-        latest_data = (
-            feature_dataframe
-            .replace(
-                [
-                    np.inf,
-                    -np.inf
-                ],
-                np.nan
-            )
-            .dropna(
-                subset=best_feature_columns
-            )
+        current_price = (
+            full_model_data[
+                "DayAheadPriceEUR"
+            ].iloc[
+                -1
+            ]
         )
 
-        current_price = 0
-
-        next_price_prediction = 0
-
-        predicted_change = 0
-
-        predicted_change_percent = 0
-
-        if not latest_data.empty:
-
-            latest_row = (
-                latest_data.iloc[
+        next_price_prediction = (
+            final_model.predict(
+                full_model_data[
+                    best_features
+                ].iloc[
                     [-1]
                 ]
-            )
+            )[0]
+        )
 
-            current_price = (
-                latest_row[
-                    "DayAheadPriceEUR"
-                ].iloc[0]
-            )
+        predicted_change = (
+            next_price_prediction
+            - current_price
+        )
 
-            next_price_prediction = (
-                final_model.predict(
-                    latest_row[
-                        best_feature_columns
-                    ]
-                )[0]
-            )
+        if (
+            current_price
+            != 0
+        ):
 
-            predicted_change = (
-                next_price_prediction
-                - current_price
-            )
+            predicted_change_percent = (
+                predicted_change
+                / abs(
+                    current_price
+                )
+            ) * 100
 
-            if current_price != 0:
+        else:
 
-                predicted_change_percent = (
-                    predicted_change
-                    / abs(
-                        current_price
-                    )
-                ) * 100
+            predicted_change_percent = 0
 
         return {
             "success":
@@ -1270,13 +1170,22 @@ class MachineLearningForecaster:
                 best_feature_set,
 
             "market_improvement":
-                market_improvement,
+                self._calculate_improvement(
+                    price_mae,
+                    market_mae
+                ),
 
             "weather_improvement_vs_price":
-                weather_improvement_vs_price,
+                self._calculate_improvement(
+                    price_mae,
+                    weather_mae
+                ),
 
             "weather_incremental_improvement":
-                weather_incremental_improvement,
+                self._calculate_improvement(
+                    market_mae,
+                    weather_mae
+                ),
 
             "actual_prices":
                 actual_values,
@@ -1322,36 +1231,738 @@ class MachineLearningForecaster:
         }
 
     # ==================================================
-    # Feature importance helpers
+    # NEW:
+    # Forward-looking forecast
     # ==================================================
 
-    def _calculate_feature_importance(
+    def create_forward_forecast(
         self,
-        fitted_models,
-        best_model_name,
-        feature_columns
+        feature_dataframe,
+        price_area,
+        horizon=24,
+        n_splits=5,
+        random_state=42
     ):
 
+        (
+            model_data,
+            error_message
+        ) = self._prepare_model_data(
+            feature_dataframe,
+            self.forward_feature_columns
+        )
+
         if (
-            best_model_name
-            not in fitted_models
+            error_message
+            is not None
         ):
 
-            return pd.DataFrame(
-                columns=[
-                    "Feature",
-                    "Importance"
+            return (
+                self._empty_forward_result(
+                    error_message
+                )
+            )
+
+        horizon = max(
+            1,
+            min(
+                int(
+                    horizon
+                ),
+                24
+            )
+        )
+
+        # ==================================================
+        # Validate models specifically for forward forecast
+        # ==================================================
+
+        X = model_data[
+            self.forward_feature_columns
+        ]
+
+        y = model_data[
+            "NextPrice"
+        ]
+
+        n_splits = self._safe_splits(
+            len(
+                model_data
+            ),
+            n_splits
+        )
+
+        if (
+            n_splits
+            < 2
+        ):
+
+            return (
+                self._empty_forward_result(
+                    "Not enough observations for forward-model validation."
+                )
+            )
+
+        splitter = (
+            TimeSeriesSplit(
+                n_splits=n_splits
+            )
+        )
+
+        validation_predictions = {
+            "Linear Regression":
+                [],
+
+            "Random Forest":
+                [],
+
+            "Gradient Boosting":
+                []
+        }
+
+        validation_actual = []
+
+        for (
+            train_index,
+            test_index
+        ) in splitter.split(
+            X
+        ):
+
+            X_train = X.iloc[
+                train_index
+            ]
+
+            X_test = X.iloc[
+                test_index
+            ]
+
+            y_train = y.iloc[
+                train_index
+            ]
+
+            y_test = y.iloc[
+                test_index
+            ]
+
+            models = (
+                self._create_models(
+                    random_state
+                )
+            )
+
+            for (
+                model_name,
+                model
+            ) in models.items():
+
+                model.fit(
+                    X_train,
+                    y_train
+                )
+
+                predictions = (
+                    model.predict(
+                        X_test
+                    )
+                )
+
+                validation_predictions[
+                    model_name
+                ].extend(
+                    predictions
+                )
+
+            validation_actual.extend(
+                y_test.to_numpy()
+            )
+
+        validation_actual = (
+            np.array(
+                validation_actual
+            )
+        )
+
+        comparison_rows = []
+
+        for (
+            model_name,
+            predictions
+        ) in (
+            validation_predictions.items()
+        ):
+
+            predictions = np.array(
+                predictions
+            )
+
+            mae = (
+                mean_absolute_error(
+                    validation_actual,
+                    predictions
+                )
+            )
+
+            rmse = np.sqrt(
+                mean_squared_error(
+                    validation_actual,
+                    predictions
+                )
+            )
+
+            r2 = (
+                r2_score(
+                    validation_actual,
+                    predictions
+                )
+                if (
+                    len(
+                        validation_actual
+                    )
+                    >= 2
+                )
+                else 0
+            )
+
+            comparison_rows.append(
+                {
+                    "Model":
+                        model_name,
+
+                    "MAE":
+                        mae,
+
+                    "RMSE":
+                        rmse,
+
+                    "R2":
+                        r2
+                }
+            )
+
+        model_comparison = (
+            pd.DataFrame(
+                comparison_rows
+            )
+            .sort_values(
+                by="MAE"
+            )
+            .reset_index(
+                drop=True
+            )
+        )
+
+        best_model_name = (
+            model_comparison.iloc[
+                0
+            ][
+                "Model"
+            ]
+        )
+
+        validation_mae = (
+            model_comparison.iloc[
+                0
+            ][
+                "MAE"
+            ]
+        )
+
+        validation_rmse = (
+            model_comparison.iloc[
+                0
+            ][
+                "RMSE"
+            ]
+        )
+
+        validation_r2 = (
+            model_comparison.iloc[
+                0
+            ][
+                "R2"
+            ]
+        )
+
+        # ==================================================
+        # Train best model on all historical data
+        # ==================================================
+
+        model = (
+            self._create_model(
+                best_model_name,
+                random_state
+            )
+        )
+
+        model.fit(
+            X,
+            y
+        )
+
+        feature_importance = (
+            self._feature_importance_from_model(
+                model,
+                self.forward_feature_columns
+            )
+        )
+
+        # ==================================================
+        # Fetch future weather forecast
+        # ==================================================
+
+        try:
+
+            future_weather = (
+                self.weather_api
+                .get_forecast_weather(
+                    price_area=price_area,
+                    forecast_hours=horizon
+                )
+            )
+
+        except Exception as error:
+
+            return (
+                self._empty_forward_result(
+                    (
+                        "Could not load future weather forecast: "
+                        f"{error}"
+                    )
+                )
+            )
+
+        if future_weather.empty:
+
+            return (
+                self._empty_forward_result(
+                    "No future weather forecast was returned."
+                )
+            )
+
+        available_horizon = min(
+            horizon,
+            len(
+                future_weather
+            )
+        )
+
+        future_weather = (
+            future_weather.head(
+                available_horizon
+            )
+            .reset_index(
+                drop=True
+            )
+        )
+
+        # ==================================================
+        # Historical prices used by recursive forecast
+        # ==================================================
+
+        historical_data = (
+            feature_dataframe[
+                [
+                    "TimeDK",
+                    "DayAheadPriceEUR"
+                ]
+            ]
+            .dropna()
+            .sort_values(
+                "TimeDK"
+            )
+            .reset_index(
+                drop=True
+            )
+        )
+
+        price_history = (
+            historical_data[
+                "DayAheadPriceEUR"
+            ]
+            .astype(
+                float
+            )
+            .tolist()
+        )
+
+        if (
+            len(
+                price_history
+            )
+            < 24
+        ):
+
+            return (
+                self._empty_forward_result(
+                    (
+                        "At least 24 hourly price observations "
+                        "are required for a forward forecast."
+                    )
+                )
+            )
+
+        current_price = (
+            price_history[
+                -1
+            ]
+        )
+
+        forecast_times = []
+
+        forecast_prices = []
+
+        # ==================================================
+        # Recursive multi-hour forecast
+        # ==================================================
+
+        for (
+            weather_index,
+            weather_row
+        ) in (
+            future_weather.iterrows()
+        ):
+
+            target_time = pd.Timestamp(
+                weather_row[
+                    "TimeDK"
                 ]
             )
 
-        return (
-            self._feature_importance_from_model(
-                fitted_models[
-                    best_model_name
+            # Current price available at this point
+            model_current_price = (
+                price_history[
+                    -1
+                ]
+            )
+
+            price_lag_1 = (
+                price_history[
+                    -2
+                ]
+            )
+
+            price_lag_2 = (
+                price_history[
+                    -3
+                ]
+            )
+
+            price_lag_24 = (
+                price_history[
+                    -24
+                ]
+            )
+
+            recent_6 = np.array(
+                price_history[
+                    -6:
                 ],
-                feature_columns
+                dtype=float
+            )
+
+            recent_24 = np.array(
+                price_history[
+                    -24:
+                ],
+                dtype=float
+            )
+
+            moving_average_6 = (
+                recent_6.mean()
+            )
+
+            moving_average_24 = (
+                recent_24.mean()
+            )
+
+            if (
+                len(
+                    recent_24
+                )
+                >= 2
+            ):
+
+                volatility_24 = (
+                    recent_24.std(
+                        ddof=1
+                    )
+                )
+
+            else:
+
+                volatility_24 = 0
+
+            target_day_of_week = (
+                target_time.dayofweek
+            )
+
+            target_is_weekend = (
+                1
+                if (
+                    target_day_of_week
+                    >= 5
+                )
+                else 0
+            )
+
+            input_row = pd.DataFrame(
+                [
+                    {
+                        "DayAheadPriceEUR":
+                            model_current_price,
+
+                        "PriceLag1":
+                            price_lag_1,
+
+                        "PriceLag2":
+                            price_lag_2,
+
+                        "PriceLag24":
+                            price_lag_24,
+
+                        "PriceMovingAverage6":
+                            moving_average_6,
+
+                        "PriceMovingAverage24":
+                            moving_average_24,
+
+                        "PriceVolatility24":
+                            volatility_24,
+
+                        "TargetTemperatureC":
+                            weather_row[
+                                "TemperatureC"
+                            ],
+
+                        "TargetWeatherWindSpeedMS":
+                            weather_row[
+                                "WeatherWindSpeedMS"
+                            ],
+
+                        "TargetCloudCoverPct":
+                            weather_row[
+                                "CloudCoverPct"
+                            ],
+
+                        "TargetPrecipitationMM":
+                            weather_row[
+                                "PrecipitationMM"
+                            ],
+
+                        "TargetHourOfDay":
+                            target_time.hour,
+
+                        "TargetDayOfWeek":
+                            target_day_of_week,
+
+                        "TargetMonth":
+                            target_time.month,
+
+                        "TargetIsWeekend":
+                            target_is_weekend
+                    }
+                ]
+            )
+
+            if (
+                input_row[
+                    self.forward_feature_columns
+                ]
+                .isna()
+                .any()
+                .any()
+            ):
+
+                continue
+
+            predicted_price = (
+                model.predict(
+                    input_row[
+                        self.forward_feature_columns
+                    ]
+                )[0]
+            )
+
+            forecast_times.append(
+                target_time
+            )
+
+            forecast_prices.append(
+                predicted_price
+            )
+
+            # Add prediction back into history.
+            # The next forecast step can now use
+            # this predicted value.
+
+            price_history.append(
+                predicted_price
+            )
+
+        if (
+            len(
+                forecast_prices
+            )
+            == 0
+        ):
+
+            return (
+                self._empty_forward_result(
+                    (
+                        "The forecast could not be generated "
+                        "because future weather observations "
+                        "contained missing values."
+                    )
+                )
+            )
+
+        forecast_prices = np.array(
+            forecast_prices
+        )
+
+        forecast_times = np.array(
+            forecast_times
+        )
+
+        ending_price = (
+            forecast_prices[
+                -1
+            ]
+        )
+
+        price_change = (
+            ending_price
+            - current_price
+        )
+
+        if (
+            current_price
+            != 0
+        ):
+
+            price_change_percent = (
+                price_change
+                / abs(
+                    current_price
+                )
+            ) * 100
+
+        else:
+
+            price_change_percent = 0
+
+        average_forecast_price = (
+            forecast_prices.mean()
+        )
+
+        maximum_forecast_price = (
+            forecast_prices.max()
+        )
+
+        minimum_forecast_price = (
+            forecast_prices.min()
+        )
+
+        # ==================================================
+        # History for chart
+        # ==================================================
+
+        history_chart = (
+            historical_data.tail(
+                48
             )
         )
+
+        return {
+            "success":
+                True,
+
+            "message":
+                "Forward-looking electricity price forecast completed.",
+
+            "best_model":
+                best_model_name,
+
+            "model_comparison":
+                model_comparison,
+
+            "validation_mae":
+                validation_mae,
+
+            "validation_rmse":
+                validation_rmse,
+
+            "validation_r2":
+                validation_r2,
+
+            "current_price":
+                current_price,
+
+            "ending_price":
+                ending_price,
+
+            "price_change":
+                price_change,
+
+            "price_change_percent":
+                price_change_percent,
+
+            "average_forecast_price":
+                average_forecast_price,
+
+            "maximum_forecast_price":
+                maximum_forecast_price,
+
+            "minimum_forecast_price":
+                minimum_forecast_price,
+
+            "forecast_times":
+                forecast_times,
+
+            "forecast_prices":
+                forecast_prices,
+
+            "forecast_hours":
+                len(
+                    forecast_prices
+                ),
+
+            "history_times":
+                history_chart[
+                    "TimeDK"
+                ].to_numpy(),
+
+            "history_prices":
+                history_chart[
+                    "DayAheadPriceEUR"
+                ].to_numpy(),
+
+            "feature_importance":
+                feature_importance,
+
+            "weather_location":
+                (
+                    self.weather_api
+                    .locations[
+                        price_area
+                    ][
+                        "name"
+                    ]
+                ),
+
+            "training_observations":
+                len(
+                    model_data
+                ),
+
+            "n_splits":
+                n_splits
+        }
+
+    # ==================================================
+    # Feature importance
+    # ==================================================
 
     def _feature_importance_from_model(
         self,
@@ -1381,7 +1992,10 @@ class MachineLearningForecaster:
                 importance.sum()
             )
 
-            if total > 0:
+            if (
+                total
+                > 0
+            ):
 
                 importance = (
                     importance
@@ -1417,8 +2031,45 @@ class MachineLearningForecaster:
         )
 
     # ==================================================
-    # Ablation helpers
+    # Helpers
     # ==================================================
+
+    def _safe_splits(
+        self,
+        observations,
+        requested_splits
+    ):
+
+        maximum_splits = (
+            observations
+            - 1
+        )
+
+        return min(
+            requested_splits,
+            maximum_splits
+        )
+
+    def _calculate_improvement(
+        self,
+        original_mae,
+        new_mae
+    ):
+
+        if (
+            original_mae
+            <= 0
+        ):
+
+            return 0
+
+        return (
+            (
+                original_mae
+                - new_mae
+            )
+            / original_mae
+        ) * 100
 
     def _get_feature_set_metric(
         self,
@@ -1440,312 +2091,13 @@ class MachineLearningForecaster:
 
             return 0
 
-        return row.iloc[
-            0
-        ][metric]
-
-    def _calculate_improvement(
-        self,
-        original_mae,
-        new_mae
-    ):
-
-        if original_mae <= 0:
-
-            return 0
-
         return (
-            (
-                original_mae
-                - new_mae
-            )
-            / original_mae
-        ) * 100
-
-    # ==================================================
-    # Random Forest compatibility
-    # ==================================================
-
-    def train_random_forest(
-        self,
-        feature_dataframe,
-        test_size=0.20,
-        n_estimators=300,
-        random_state=42
-    ):
-
-        (
-            model_data,
-            error_message
-        ) = self._prepare_model_data(
-            feature_dataframe,
-            self.feature_columns
-        )
-
-        if error_message is not None:
-
-            return self._empty_random_forest_result(
-                error_message
-            )
-
-        X = model_data[
-            self.feature_columns
-        ]
-
-        y = model_data[
-            "NextPrice"
-        ]
-
-        split_index = int(
-            len(
-                model_data
-            )
-            * (
-                1
-                - test_size
-            )
-        )
-
-        split_index = max(
-            1,
-            min(
-                split_index,
-                len(
-                    model_data
-                ) - 1
-            )
-        )
-
-        X_train = X.iloc[
-            :split_index
-        ]
-
-        X_test = X.iloc[
-            split_index:
-        ]
-
-        y_train = y.iloc[
-            :split_index
-        ]
-
-        y_test = y.iloc[
-            split_index:
-        ]
-
-        test_times = (
-            model_data[
-                "TimeDK"
-            ].iloc[
-                split_index:
+            row.iloc[
+                0
+            ][
+                metric
             ]
         )
-
-        model = (
-            RandomForestRegressor(
-                n_estimators=n_estimators,
-                max_depth=12,
-                min_samples_leaf=2,
-                random_state=random_state,
-                n_jobs=-1
-            )
-        )
-
-        model.fit(
-            X_train,
-            y_train
-        )
-
-        predictions = (
-            model.predict(
-                X_test
-            )
-        )
-
-        mae = (
-            mean_absolute_error(
-                y_test,
-                predictions
-            )
-        )
-
-        rmse = np.sqrt(
-            mean_squared_error(
-                y_test,
-                predictions
-            )
-        )
-
-        if len(
-            y_test
-        ) >= 2:
-
-            r2 = (
-                r2_score(
-                    y_test,
-                    predictions
-                )
-            )
-
-        else:
-
-            r2 = 0
-
-        baseline_predictions = (
-            X_test[
-                "DayAheadPriceEUR"
-            ].to_numpy()
-        )
-
-        baseline_mae = (
-            mean_absolute_error(
-                y_test,
-                baseline_predictions
-            )
-        )
-
-        if baseline_mae > 0:
-
-            improvement = (
-                (
-                    baseline_mae
-                    - mae
-                )
-                / baseline_mae
-            ) * 100
-
-        else:
-
-            improvement = 0
-
-        feature_importance = (
-            self._feature_importance_from_model(
-                model,
-                self.feature_columns
-            )
-        )
-
-        current_price = 0
-
-        next_price_prediction = 0
-
-        predicted_change = 0
-
-        predicted_change_percent = 0
-
-        prediction_data = (
-            feature_dataframe
-            .replace(
-                [
-                    np.inf,
-                    -np.inf
-                ],
-                np.nan
-            )
-            .dropna(
-                subset=self.feature_columns
-            )
-        )
-
-        if not prediction_data.empty:
-
-            latest_row = (
-                prediction_data.iloc[
-                    [-1]
-                ]
-            )
-
-            current_price = (
-                latest_row[
-                    "DayAheadPriceEUR"
-                ].iloc[0]
-            )
-
-            next_price_prediction = (
-                model.predict(
-                    latest_row[
-                        self.feature_columns
-                    ]
-                )[0]
-            )
-
-            predicted_change = (
-                next_price_prediction
-                - current_price
-            )
-
-            if current_price != 0:
-
-                predicted_change_percent = (
-                    predicted_change
-                    / abs(
-                        current_price
-                    )
-                ) * 100
-
-        return {
-            "success":
-                True,
-
-            "message":
-                "Random Forest model trained successfully.",
-
-            "model":
-                model,
-
-            "mae":
-                mae,
-
-            "rmse":
-                rmse,
-
-            "r2":
-                r2,
-
-            "baseline_mae":
-                baseline_mae,
-
-            "improvement_vs_baseline":
-                improvement,
-
-            "current_price":
-                current_price,
-
-            "next_price_prediction":
-                next_price_prediction,
-
-            "predicted_change":
-                predicted_change,
-
-            "predicted_change_percent":
-                predicted_change_percent,
-
-            "actual_prices":
-                y_test.to_numpy(),
-
-            "predicted_prices":
-                predictions,
-
-            "test_times":
-                test_times.to_numpy(),
-
-            "feature_importance":
-                feature_importance,
-
-            "training_observations":
-                len(
-                    X_train
-                ),
-
-            "testing_observations":
-                len(
-                    X_test
-                ),
-
-            "total_observations":
-                len(
-                    model_data
-                )
-        }
 
     # ==================================================
     # Empty results
@@ -1873,7 +2225,7 @@ class MachineLearningForecaster:
                 0
         }
 
-    def _empty_random_forest_result(
+    def _empty_forward_result(
         self,
         message
     ):
@@ -1885,54 +2237,66 @@ class MachineLearningForecaster:
             "message":
                 message,
 
-            "model":
-                None,
+            "best_model":
+                "None",
 
-            "mae":
+            "model_comparison":
+                pd.DataFrame(),
+
+            "validation_mae":
                 0,
 
-            "rmse":
+            "validation_rmse":
                 0,
 
-            "r2":
-                0,
-
-            "baseline_mae":
-                0,
-
-            "improvement_vs_baseline":
+            "validation_r2":
                 0,
 
             "current_price":
                 0,
 
-            "next_price_prediction":
+            "ending_price":
                 0,
 
-            "predicted_change":
+            "price_change":
                 0,
 
-            "predicted_change_percent":
+            "price_change_percent":
                 0,
 
-            "actual_prices":
+            "average_forecast_price":
+                0,
+
+            "maximum_forecast_price":
+                0,
+
+            "minimum_forecast_price":
+                0,
+
+            "forecast_times":
                 np.array([]),
 
-            "predicted_prices":
+            "forecast_prices":
                 np.array([]),
 
-            "test_times":
+            "forecast_hours":
+                0,
+
+            "history_times":
+                np.array([]),
+
+            "history_prices":
                 np.array([]),
 
             "feature_importance":
                 pd.DataFrame(),
 
+            "weather_location":
+                "",
+
             "training_observations":
                 0,
 
-            "testing_observations":
-                0,
-
-            "total_observations":
+            "n_splits":
                 0
         }

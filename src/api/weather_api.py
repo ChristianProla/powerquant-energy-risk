@@ -36,7 +36,7 @@ class WeatherAPI:
         }
 
     # ==================================================
-    # Public method
+    # Historical + recent weather
     # ==================================================
 
     def get_weather(
@@ -46,11 +46,9 @@ class WeatherAPI:
         end_date="now"
     ):
 
-        if price_area not in self.locations:
-
-            raise ValueError(
-                f"Unknown price area: {price_area}"
-            )
+        self._validate_price_area(
+            price_area
+        )
 
         start_timestamp = (
             self._resolve_start_date(
@@ -105,7 +103,9 @@ class WeatherAPI:
 
         weather = (
             weather.drop_duplicates(
-                subset=["TimeDK"],
+                subset=[
+                    "TimeDK"
+                ],
                 keep="last"
             )
         )
@@ -133,6 +133,107 @@ class WeatherAPI:
         return weather
 
     # ==================================================
+    # Future weather forecast
+    # ==================================================
+
+    def get_forecast_weather(
+        self,
+        price_area="DK1",
+        forecast_hours=24
+    ):
+
+        self._validate_price_area(
+            price_area
+        )
+
+        location = self.locations[
+            price_area
+        ]
+
+        requested_hours = max(
+            1,
+            min(
+                int(forecast_hours),
+                72
+            )
+        )
+
+        # Request one extra hour because the API
+        # can include the current hour.
+
+        params = {
+            "latitude":
+                location[
+                    "latitude"
+                ],
+
+            "longitude":
+                location[
+                    "longitude"
+                ],
+
+            "hourly":
+                (
+                    "temperature_2m,"
+                    "wind_speed_10m,"
+                    "cloud_cover,"
+                    "precipitation"
+                ),
+
+            "wind_speed_unit":
+                "ms",
+
+            "forecast_hours":
+                requested_hours + 2,
+
+            "timezone":
+                "Europe/Copenhagen"
+        }
+
+        response = requests.get(
+            self.forecast_url,
+            params=params,
+            timeout=20
+        )
+
+        response.raise_for_status()
+
+        dataframe = (
+            self._convert_response(
+                response.json(),
+                price_area
+            )
+        )
+
+        if dataframe.empty:
+
+            return dataframe
+
+        # We only want future hours,
+        # not the current hour.
+
+        current_hour = (
+            pd.Timestamp.now()
+            .floor("h")
+        )
+
+        dataframe = dataframe[
+            dataframe[
+                "TimeDK"
+            ] > current_hour
+        ]
+
+        dataframe = dataframe.head(
+            requested_hours
+        )
+
+        dataframe = dataframe.reset_index(
+            drop=True
+        )
+
+        return dataframe
+
+    # ==================================================
     # Historical weather
     # ==================================================
 
@@ -143,25 +244,24 @@ class WeatherAPI:
         end_timestamp
     ):
 
-        # Historical archive data can lag behind
-        # real time slightly.
-        #
-        # We therefore use the archive until
-        # six days ago and the live forecast API
-        # for the most recent period.
-
         archive_end = (
             pd.Timestamp(
                 datetime.now()
-                - timedelta(days=6)
+                - timedelta(
+                    days=6
+                )
             )
+            .normalize()
         )
 
-        archive_end = archive_end.normalize()
+        if (
+            start_timestamp
+            > archive_end
+        ):
 
-        if start_timestamp > archive_end:
-
-            return self._empty_dataframe()
+            return (
+                self._empty_dataframe()
+            )
 
         requested_end = min(
             end_timestamp,
@@ -174,10 +274,14 @@ class WeatherAPI:
 
         params = {
             "latitude":
-                location["latitude"],
+                location[
+                    "latitude"
+                ],
 
             "longitude":
-                location["longitude"],
+                location[
+                    "longitude"
+                ],
 
             "start_date":
                 start_timestamp.strftime(
@@ -214,17 +318,24 @@ class WeatherAPI:
 
             response.raise_for_status()
 
-        except requests.exceptions.RequestException:
+        except (
+            requests.exceptions
+            .RequestException
+        ):
 
-            return self._empty_dataframe()
+            return (
+                self._empty_dataframe()
+            )
 
-        return self._convert_response(
-            response.json(),
-            price_area
+        return (
+            self._convert_response(
+                response.json(),
+                price_area
+            )
         )
 
     # ==================================================
-    # Recent weather
+    # Recent observed / forecast weather
     # ==================================================
 
     def _get_recent_weather(
@@ -240,10 +351,14 @@ class WeatherAPI:
 
         params = {
             "latitude":
-                location["latitude"],
+                location[
+                    "latitude"
+                ],
 
             "longitude":
-                location["longitude"],
+                location[
+                    "longitude"
+                ],
 
             "hourly":
                 (
@@ -276,13 +391,20 @@ class WeatherAPI:
 
             response.raise_for_status()
 
-        except requests.exceptions.RequestException:
+        except (
+            requests.exceptions
+            .RequestException
+        ):
 
-            return self._empty_dataframe()
+            return (
+                self._empty_dataframe()
+            )
 
-        dataframe = self._convert_response(
-            response.json(),
-            price_area
+        dataframe = (
+            self._convert_response(
+                response.json(),
+                price_area
+            )
         )
 
         if dataframe.empty:
@@ -291,12 +413,16 @@ class WeatherAPI:
 
         dataframe = dataframe[
             (
-                dataframe["TimeDK"]
+                dataframe[
+                    "TimeDK"
+                ]
                 >= start_timestamp
             )
             &
             (
-                dataframe["TimeDK"]
+                dataframe[
+                    "TimeDK"
+                ]
                 <= end_timestamp
             )
         ]
@@ -329,7 +455,34 @@ class WeatherAPI:
 
         if not times:
 
-            return self._empty_dataframe()
+            return (
+                self._empty_dataframe()
+            )
+
+        number_of_rows = len(
+            times
+        )
+
+        def safe_values(
+            key
+        ):
+
+            values = hourly.get(
+                key
+            )
+
+            if (
+                values is None
+                or
+                len(values)
+                != number_of_rows
+            ):
+
+                return [
+                    None
+                ] * number_of_rows
+
+            return values
 
         dataframe = pd.DataFrame(
             {
@@ -337,27 +490,23 @@ class WeatherAPI:
                     times,
 
                 "TemperatureC":
-                    hourly.get(
-                        "temperature_2m",
-                        []
+                    safe_values(
+                        "temperature_2m"
                     ),
 
                 "WeatherWindSpeedMS":
-                    hourly.get(
-                        "wind_speed_10m",
-                        []
+                    safe_values(
+                        "wind_speed_10m"
                     ),
 
                 "CloudCoverPct":
-                    hourly.get(
-                        "cloud_cover",
-                        []
+                    safe_values(
+                        "cloud_cover"
                     ),
 
                 "PrecipitationMM":
-                    hourly.get(
-                        "precipitation",
-                        []
+                    safe_values(
+                        "precipitation"
                     )
             }
         )
@@ -365,7 +514,9 @@ class WeatherAPI:
         dataframe[
             "TimeDK"
         ] = pd.to_datetime(
-            dataframe["TimeDK"],
+            dataframe[
+                "TimeDK"
+            ],
             errors="coerce"
         )
 
@@ -376,12 +527,16 @@ class WeatherAPI:
             "PrecipitationMM"
         ]
 
-        for column in numeric_columns:
+        for column in (
+            numeric_columns
+        ):
 
             dataframe[
                 column
             ] = pd.to_numeric(
-                dataframe[column],
+                dataframe[
+                    column
+                ],
                 errors="coerce"
             )
 
@@ -391,23 +546,56 @@ class WeatherAPI:
 
         dataframe[
             "WeatherLocation"
-        ] = self.locations[
-            price_area
-        ]["name"]
-
-        dataframe = dataframe.dropna(
-            subset=["TimeDK"]
+        ] = (
+            self.locations[
+                price_area
+            ][
+                "name"
+            ]
         )
 
-        dataframe = dataframe.sort_values(
-            "TimeDK"
+        dataframe = (
+            dataframe.dropna(
+                subset=[
+                    "TimeDK"
+                ]
+            )
         )
 
-        dataframe = dataframe.reset_index(
-            drop=True
+        dataframe = (
+            dataframe.sort_values(
+                "TimeDK"
+            )
+        )
+
+        dataframe = (
+            dataframe.reset_index(
+                drop=True
+            )
         )
 
         return dataframe
+
+    # ==================================================
+    # Validate area
+    # ==================================================
+
+    def _validate_price_area(
+        self,
+        price_area
+    ):
+
+        if (
+            price_area
+            not in self.locations
+        ):
+
+            raise ValueError(
+                (
+                    "Unknown price area: "
+                    f"{price_area}"
+                )
+            )
 
     # ==================================================
     # Relative dates
@@ -424,25 +612,40 @@ class WeatherAPI:
 
         relative_ranges = {
             "now-PT1H":
-                timedelta(hours=1),
+                timedelta(
+                    hours=1
+                ),
 
             "now-P1D":
-                timedelta(days=1),
+                timedelta(
+                    days=1
+                ),
 
             "now-P7D":
-                timedelta(days=7),
+                timedelta(
+                    days=7
+                ),
 
             "now-P1W":
-                timedelta(days=7),
+                timedelta(
+                    days=7
+                ),
 
             "now-P1M":
-                timedelta(days=30),
+                timedelta(
+                    days=30
+                ),
 
             "now-P1Y":
-                timedelta(days=365)
+                timedelta(
+                    days=365
+                )
         }
 
-        if start_date in relative_ranges:
+        if (
+            start_date
+            in relative_ranges
+        ):
 
             return (
                 now
@@ -461,7 +664,9 @@ class WeatherAPI:
 
             return (
                 now
-                - timedelta(days=30)
+                - timedelta(
+                    days=30
+                )
             )
 
     def _resolve_end_date(
@@ -469,7 +674,10 @@ class WeatherAPI:
         end_date
     ):
 
-        if end_date == "now":
+        if (
+            end_date
+            == "now"
+        ):
 
             return pd.Timestamp(
                 datetime.now()

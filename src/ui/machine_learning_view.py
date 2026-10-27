@@ -36,15 +36,9 @@ class MachineLearningView:
             container
         )
 
-        # --------------------------------------------------
-        # Title
-        # --------------------------------------------------
-
         tk.Label(
             container,
-            text=(
-                "Machine Learning Analysis"
-            ),
+            text="Machine Learning Analysis",
             font=(
                 "Arial",
                 15,
@@ -58,9 +52,9 @@ class MachineLearningView:
         tk.Label(
             container,
             text=(
-                "Compare forecasting models or test "
-                "how much market and weather features "
-                "improve predictive performance."
+                "Compare models, measure feature impact "
+                "or create a forward-looking electricity "
+                "price forecast using future weather."
             ),
             font=(
                 "Arial",
@@ -71,9 +65,9 @@ class MachineLearningView:
             pady=(0, 10)
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # Controls
-        # --------------------------------------------------
+        # ==================================================
 
         controls = tk.Frame(
             container
@@ -99,7 +93,9 @@ class MachineLearningView:
 
         ttk.Combobox(
             controls,
-            textvariable=folds_variable,
+            textvariable=(
+                folds_variable
+            ),
             values=[
                 "3",
                 "4",
@@ -107,10 +103,10 @@ class MachineLearningView:
                 "6"
             ],
             state="readonly",
-            width=7
+            width=6
         ).pack(
             side="left",
-            padx=(5, 20)
+            padx=(5, 15)
         )
 
         tk.Label(
@@ -137,10 +133,53 @@ class MachineLearningView:
                 "Gradient Boosting"
             ],
             state="readonly",
-            width=18
+            width=17
         ).pack(
             side="left",
-            padx=(5, 20)
+            padx=(5, 15)
+        )
+
+        tk.Label(
+            controls,
+            text="Forward Horizon:"
+        ).pack(
+            side="left"
+        )
+
+        horizon_variable = (
+            tk.StringVar(
+                value="24"
+            )
+        )
+
+        ttk.Combobox(
+            controls,
+            textvariable=(
+                horizon_variable
+            ),
+            values=[
+                "6",
+                "12",
+                "24"
+            ],
+            state="readonly",
+            width=5
+        ).pack(
+            side="left",
+            padx=(5, 15)
+        )
+
+        # ==================================================
+        # Button row
+        # ==================================================
+
+        button_frame = tk.Frame(
+            container
+        )
+
+        button_frame.pack(
+            fill="x",
+            pady=(0, 10)
         )
 
         output_frame = tk.Frame(
@@ -152,9 +191,9 @@ class MachineLearningView:
             expand=True
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # Model comparison
-        # --------------------------------------------------
+        # ==================================================
 
         def run_model_comparison():
 
@@ -162,15 +201,13 @@ class MachineLearningView:
                 output_frame
             )
 
-            folds = int(
-                folds_variable.get()
-            )
-
             results = (
                 self.machine_learning_forecaster
                 .compare_models(
                     feature_data,
-                    n_splits=folds
+                    n_splits=int(
+                        folds_variable.get()
+                    )
                 )
             )
 
@@ -194,9 +231,9 @@ class MachineLearningView:
                 time_range
             )
 
-        # --------------------------------------------------
-        # Feature ablation
-        # --------------------------------------------------
+        # ==================================================
+        # Feature impact
+        # ==================================================
 
         def run_feature_ablation():
 
@@ -204,20 +241,16 @@ class MachineLearningView:
                 output_frame
             )
 
-            folds = int(
-                folds_variable.get()
-            )
-
-            model_name = (
-                ablation_model_variable.get()
-            )
-
             results = (
                 self.machine_learning_forecaster
                 .compare_feature_sets(
                     feature_data,
-                    model_name=model_name,
-                    n_splits=folds
+                    model_name=(
+                        ablation_model_variable.get()
+                    ),
+                    n_splits=int(
+                        folds_variable.get()
+                    )
                 )
             )
 
@@ -241,8 +274,77 @@ class MachineLearningView:
                 time_range
             )
 
+        # ==================================================
+        # Forward forecast
+        # ==================================================
+
+        def run_forward_forecast():
+
+            self._clear_frame(
+                output_frame
+            )
+
+            tk.Label(
+                output_frame,
+                text=(
+                    "Loading future weather and "
+                    "training forecast models..."
+                ),
+                font=(
+                    "Arial",
+                    10,
+                    "bold"
+                )
+            ).pack(
+                anchor="w",
+                pady=20
+            )
+
+            container.update()
+
+            results = (
+                self.machine_learning_forecaster
+                .create_forward_forecast(
+                    feature_data,
+                    price_area=price_area,
+                    horizon=int(
+                        horizon_variable.get()
+                    ),
+                    n_splits=int(
+                        folds_variable.get()
+                    )
+                )
+            )
+
+            self._clear_frame(
+                output_frame
+            )
+
+            if not results[
+                "success"
+            ]:
+
+                self._show_error(
+                    output_frame,
+                    results[
+                        "message"
+                    ]
+                )
+
+                return
+
+            self._show_forward_forecast(
+                output_frame,
+                results,
+                price_area
+            )
+
+        # ==================================================
+        # Buttons
+        # ==================================================
+
         tk.Button(
-            controls,
+            button_frame,
             text="Compare Models",
             font=(
                 "Arial",
@@ -258,7 +360,7 @@ class MachineLearningView:
         )
 
         tk.Button(
-            controls,
+            button_frame,
             text="Feature Impact Test",
             font=(
                 "Arial",
@@ -269,14 +371,29 @@ class MachineLearningView:
                 run_feature_ablation
             )
         ).pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        tk.Button(
+            button_frame,
+            text="Forward Forecast",
+            font=(
+                "Arial",
+                10,
+                "bold"
+            ),
+            command=(
+                run_forward_forecast
+            )
+        ).pack(
             side="left"
         )
 
-        # Default page
         run_model_comparison()
 
     # ==================================================
-    # Model comparison display
+    # Model comparison
     # ==================================================
 
     def _show_model_comparison(
@@ -300,10 +417,6 @@ class MachineLearningView:
             pady=(0, 6)
         )
 
-        # --------------------------------------------------
-        # Summary
-        # --------------------------------------------------
-
         summary_frame = tk.Frame(
             container
         )
@@ -313,7 +426,7 @@ class MachineLearningView:
             pady=(0, 8)
         )
 
-        summary_values = [
+        values = [
             (
                 "Best Model",
                 results[
@@ -335,111 +448,30 @@ class MachineLearningView:
                 )
             ),
             (
-                "Predicted Change",
+                "Change",
                 (
                     f"{results['predicted_change']:+.2f} "
                     f"EUR/MWh"
                 )
             ),
             (
-                "Predicted Change %",
+                "Change %",
                 (
                     f"{results['predicted_change_percent']:+.2f}%"
                 )
             )
         ]
 
-        for (
-            name,
-            value
-        ) in summary_values:
-
-            tk.Label(
-                summary_frame,
-                text=(
-                    f"{name}\n"
-                    f"{value}"
-                ),
-                font=(
-                    "Arial",
-                    9,
-                    "bold"
-                ),
-                padx=11
-            ).pack(
-                side="left"
-            )
-
-        # --------------------------------------------------
-        # Validation info
-        # --------------------------------------------------
-
-        validation_frame = tk.Frame(
-            container
+        self._show_stats(
+            summary_frame,
+            values,
+            bold=True
         )
-
-        validation_frame.pack(
-            fill="x",
-            pady=(0, 8)
-        )
-
-        validation_values = [
-            (
-                "Validation",
-                "Walk-Forward"
-            ),
-            (
-                "Folds",
-                (
-                    f"{results['n_splits']}"
-                )
-            ),
-            (
-                "Observations",
-                (
-                    f"{results['total_observations']:,}"
-                )
-            ),
-            (
-                "Validation Predictions",
-                (
-                    f"{results['validation_observations']:,}"
-                )
-            )
-        ]
-
-        for (
-            name,
-            value
-        ) in validation_values:
-
-            tk.Label(
-                validation_frame,
-                text=(
-                    f"{name}\n"
-                    f"{value}"
-                ),
-                font=(
-                    "Arial",
-                    9
-                ),
-                padx=12
-            ).pack(
-                side="left"
-            )
-
-        # --------------------------------------------------
-        # Comparison table
-        # --------------------------------------------------
 
         self._create_model_table(
             container,
             results
         )
-
-        # --------------------------------------------------
-        # Feature importance
-        # --------------------------------------------------
 
         self._show_feature_importance(
             container,
@@ -447,10 +479,6 @@ class MachineLearningView:
                 "feature_importance"
             ]
         )
-
-        # --------------------------------------------------
-        # Chart
-        # --------------------------------------------------
 
         figure = (
             self._create_prediction_chart(
@@ -468,8 +496,8 @@ class MachineLearningView:
                     f"Prediction"
                 ),
                 (
-                    f"{price_area} Model Validation "
-                    f"- {time_range}"
+                    f"{price_area} Walk-Forward "
+                    f"Validation - {time_range}"
                 )
             )
         )
@@ -480,7 +508,7 @@ class MachineLearningView:
         )
 
     # ==================================================
-    # Ablation display
+    # Feature impact
     # ==================================================
 
     def _show_ablation_results(
@@ -504,27 +532,6 @@ class MachineLearningView:
             pady=(0, 6)
         )
 
-        tk.Label(
-            container,
-            text=(
-                "The same model and the same "
-                "walk-forward folds are used for every "
-                "feature set. This isolates the value "
-                "of additional data."
-            ),
-            font=(
-                "Arial",
-                9
-            )
-        ).pack(
-            anchor="w",
-            pady=(0, 8)
-        )
-
-        # --------------------------------------------------
-        # Main summary
-        # --------------------------------------------------
-
         summary_frame = tk.Frame(
             container
         )
@@ -534,7 +541,7 @@ class MachineLearningView:
             pady=(0, 8)
         )
 
-        summary_values = [
+        values = [
             (
                 "Model",
                 results[
@@ -548,127 +555,35 @@ class MachineLearningView:
                 ]
             ),
             (
-                "Market Factor Impact",
+                "Market Impact",
                 (
                     f"{results['market_improvement']:+.1f}%"
                 )
             ),
             (
-                "Weather vs Price Only",
+                "Weather vs Price",
                 (
                     f"{results['weather_improvement_vs_price']:+.1f}%"
                 )
             ),
             (
-                "Weather Incremental Impact",
+                "Weather Incremental",
                 (
                     f"{results['weather_incremental_improvement']:+.1f}%"
                 )
             )
         ]
 
-        for (
-            name,
-            value
-        ) in summary_values:
-
-            tk.Label(
-                summary_frame,
-                text=(
-                    f"{name}\n"
-                    f"{value}"
-                ),
-                font=(
-                    "Arial",
-                    9,
-                    "bold"
-                ),
-                padx=10
-            ).pack(
-                side="left"
-            )
-
-        # --------------------------------------------------
-        # Prediction summary
-        # --------------------------------------------------
-
-        prediction_frame = tk.Frame(
-            container
+        self._show_stats(
+            summary_frame,
+            values,
+            bold=True
         )
-
-        prediction_frame.pack(
-            fill="x",
-            pady=(0, 8)
-        )
-
-        prediction_values = [
-            (
-                "Current Price",
-                (
-                    f"{results['current_price']:.2f} "
-                    f"EUR/MWh"
-                )
-            ),
-            (
-                "Predicted Next Price",
-                (
-                    f"{results['next_price_prediction']:.2f} "
-                    f"EUR/MWh"
-                )
-            ),
-            (
-                "Predicted Change",
-                (
-                    f"{results['predicted_change']:+.2f} "
-                    f"EUR/MWh"
-                )
-            ),
-            (
-                "Folds",
-                (
-                    f"{results['n_splits']}"
-                )
-            ),
-            (
-                "Common Observations",
-                (
-                    f"{results['total_observations']:,}"
-                )
-            )
-        ]
-
-        for (
-            name,
-            value
-        ) in prediction_values:
-
-            tk.Label(
-                prediction_frame,
-                text=(
-                    f"{name}\n"
-                    f"{value}"
-                ),
-                font=(
-                    "Arial",
-                    9
-                ),
-                padx=11
-            ).pack(
-                side="left"
-            )
-
-        # --------------------------------------------------
-        # Feature set comparison table
-        # --------------------------------------------------
 
         self._create_ablation_table(
             container,
             results
         )
-
-        # --------------------------------------------------
-        # Feature importance of winning feature set
-        # --------------------------------------------------
 
         self._show_feature_importance(
             container,
@@ -676,10 +591,6 @@ class MachineLearningView:
                 "feature_importance"
             ]
         )
-
-        # --------------------------------------------------
-        # Chart
-        # --------------------------------------------------
 
         figure = (
             self._create_prediction_chart(
@@ -697,7 +608,7 @@ class MachineLearningView:
                     f"Prediction"
                 ),
                 (
-                    f"{price_area} Feature Ablation "
+                    f"{price_area} Feature Impact "
                     f"- {time_range}"
                 )
             )
@@ -707,6 +618,376 @@ class MachineLearningView:
             container,
             figure
         )
+
+    # ==================================================
+    # NEW:
+    # Forward forecast display
+    # ==================================================
+
+    def _show_forward_forecast(
+        self,
+        container,
+        results,
+        price_area
+    ):
+
+        tk.Label(
+            container,
+            text="Forward-Looking Price Forecast",
+            font=(
+                "Arial",
+                12,
+                "bold"
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 4)
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "The model uses historical electricity prices "
+                "and future weather forecasts to recursively "
+                "predict upcoming hourly electricity prices."
+            ),
+            font=(
+                "Arial",
+                9
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 8)
+        )
+
+        # ==================================================
+        # Main forecast stats
+        # ==================================================
+
+        stats_row_1 = tk.Frame(
+            container
+        )
+
+        stats_row_1.pack(
+            fill="x",
+            pady=(0, 5)
+        )
+
+        row_1 = [
+            (
+                "Model",
+                results[
+                    "best_model"
+                ]
+            ),
+            (
+                "Horizon",
+                (
+                    f"{results['forecast_hours']} hours"
+                )
+            ),
+            (
+                "Current Price",
+                (
+                    f"{results['current_price']:.2f} "
+                    f"EUR/MWh"
+                )
+            ),
+            (
+                "End Forecast",
+                (
+                    f"{results['ending_price']:.2f} "
+                    f"EUR/MWh"
+                )
+            ),
+            (
+                "Total Change",
+                (
+                    f"{results['price_change']:+.2f} "
+                    f"EUR/MWh"
+                )
+            ),
+            (
+                "Change %",
+                (
+                    f"{results['price_change_percent']:+.2f}%"
+                )
+            )
+        ]
+
+        self._show_stats(
+            stats_row_1,
+            row_1,
+            bold=True
+        )
+
+        stats_row_2 = tk.Frame(
+            container
+        )
+
+        stats_row_2.pack(
+            fill="x",
+            pady=(0, 7)
+        )
+
+        row_2 = [
+            (
+                "Average Forecast",
+                (
+                    f"{results['average_forecast_price']:.2f} "
+                    f"EUR/MWh"
+                )
+            ),
+            (
+                "Forecast High",
+                (
+                    f"{results['maximum_forecast_price']:.2f} "
+                    f"EUR/MWh"
+                )
+            ),
+            (
+                "Forecast Low",
+                (
+                    f"{results['minimum_forecast_price']:.2f} "
+                    f"EUR/MWh"
+                )
+            ),
+            (
+                "Validation MAE",
+                (
+                    f"{results['validation_mae']:.2f} "
+                    f"EUR/MWh"
+                )
+            ),
+            (
+                "Validation RMSE",
+                (
+                    f"{results['validation_rmse']:.2f} "
+                    f"EUR/MWh"
+                )
+            ),
+            (
+                "Validation R²",
+                (
+                    f"{results['validation_r2']:.3f}"
+                )
+            )
+        ]
+
+        self._show_stats(
+            stats_row_2,
+            row_2,
+            bold=False
+        )
+
+        tk.Label(
+            container,
+            text=(
+                f"Weather forecast proxy: "
+                f"{results['weather_location']} "
+                f"for {price_area}"
+            ),
+            font=(
+                "Arial",
+                9
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 5)
+        )
+
+        # ==================================================
+        # Feature importance
+        # ==================================================
+
+        self._show_feature_importance(
+            container,
+            results[
+                "feature_importance"
+            ]
+        )
+
+        # ==================================================
+        # Forward chart
+        # ==================================================
+
+        figure = (
+            self._create_forward_chart(
+                results,
+                price_area
+            )
+        )
+
+        self._embed_chart(
+            container,
+            figure
+        )
+
+    # ==================================================
+    # Forward chart
+    # ==================================================
+
+    def _create_forward_chart(
+        self,
+        results,
+        price_area
+    ):
+
+        figure = Figure(
+            figsize=(
+                10,
+                3.8
+            ),
+            dpi=100
+        )
+
+        axis = figure.add_subplot(
+            111
+        )
+
+        history_times = (
+            results[
+                "history_times"
+            ]
+        )
+
+        history_prices = (
+            results[
+                "history_prices"
+            ]
+        )
+
+        forecast_times = (
+            results[
+                "forecast_times"
+            ]
+        )
+
+        forecast_prices = (
+            results[
+                "forecast_prices"
+            ]
+        )
+
+        axis.plot(
+            history_times,
+            history_prices,
+            label="Historical Price",
+            linewidth=2
+        )
+
+        # Connect historical price to forecast.
+
+        if (
+            len(
+                history_times
+            )
+            > 0
+            and
+            len(
+                forecast_times
+            )
+            > 0
+        ):
+
+            connection_times = [
+                history_times[
+                    -1
+                ],
+                forecast_times[
+                    0
+                ]
+            ]
+
+            connection_prices = [
+                history_prices[
+                    -1
+                ],
+                forecast_prices[
+                    0
+                ]
+            ]
+
+            axis.plot(
+                connection_times,
+                connection_prices,
+                linestyle="--",
+                linewidth=2
+            )
+
+        axis.plot(
+            forecast_times,
+            forecast_prices,
+            label=(
+                f"{results['best_model']} "
+                f"Forward Forecast"
+            ),
+            linestyle="--",
+            linewidth=2
+        )
+
+        if (
+            len(
+                forecast_times
+            )
+            > 0
+        ):
+
+            axis.axvline(
+                x=forecast_times[
+                    0
+                ],
+                linestyle=":",
+                linewidth=1.5,
+                label="Forecast Period"
+            )
+
+        axis.set_title(
+            (
+                f"{price_area} "
+                f"{results['forecast_hours']}-Hour "
+                f"Electricity Price Forecast"
+            )
+        )
+
+        axis.set_xlabel(
+            "Time"
+        )
+
+        axis.set_ylabel(
+            "Price (EUR/MWh)"
+        )
+
+        axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        axis.legend(
+            fontsize=8
+        )
+
+        locator = (
+            mdates.AutoDateLocator()
+        )
+
+        formatter = (
+            mdates.ConciseDateFormatter(
+                locator
+            )
+        )
+
+        axis.xaxis.set_major_locator(
+            locator
+        )
+
+        axis.xaxis.set_major_formatter(
+            formatter
+        )
+
+        figure.tight_layout()
+
+        return figure
 
     # ==================================================
     # Model table
@@ -754,14 +1035,14 @@ class MachineLearningView:
                 anchor="w"
             ).grid(
                 row=0,
-                column=column_number,
-                padx=2,
-                pady=1
+                column=column_number
             )
 
-        table = results[
-            "comparison_table"
-        ]
+        table = (
+            results[
+                "comparison_table"
+            ]
+        )
 
         for (
             row_number,
@@ -799,12 +1080,16 @@ class MachineLearningView:
             )
 
             font = (
-                "Arial",
-                9,
-                "bold"
-            ) if is_best else (
-                "Arial",
-                9
+                (
+                    "Arial",
+                    9,
+                    "bold"
+                )
+                if is_best
+                else (
+                    "Arial",
+                    9
+                )
             )
 
             for (
@@ -822,9 +1107,7 @@ class MachineLearningView:
                     anchor="w"
                 ).grid(
                     row=row_number,
-                    column=column_number,
-                    padx=2,
-                    pady=1
+                    column=column_number
                 )
 
     # ==================================================
@@ -885,14 +1168,14 @@ class MachineLearningView:
                 anchor="w"
             ).grid(
                 row=0,
-                column=column_number,
-                padx=2,
-                pady=1
+                column=column_number
             )
 
-        table = results[
-            "comparison_table"
-        ]
+        table = (
+            results[
+                "comparison_table"
+            ]
+        )
 
         for (
             row_number,
@@ -933,12 +1216,16 @@ class MachineLearningView:
             )
 
             font = (
-                "Arial",
-                9,
-                "bold"
-            ) if is_best else (
-                "Arial",
-                9
+                (
+                    "Arial",
+                    9,
+                    "bold"
+                )
+                if is_best
+                else (
+                    "Arial",
+                    9
+                )
             )
 
             for (
@@ -958,9 +1245,7 @@ class MachineLearningView:
                     anchor="w"
                 ).grid(
                     row=row_number,
-                    column=column_number,
-                    padx=2,
-                    pady=1
+                    column=column_number
                 )
 
     # ==================================================
@@ -973,21 +1258,23 @@ class MachineLearningView:
         feature_importance
     ):
 
-        if feature_importance.empty:
+        if (
+            feature_importance.empty
+        ):
 
             return
 
-        feature_frame = tk.Frame(
+        frame = tk.Frame(
             container
         )
 
-        feature_frame.pack(
+        frame.pack(
             fill="x",
-            pady=(0, 8)
+            pady=(0, 7)
         )
 
         tk.Label(
-            feature_frame,
+            frame,
             text="Top Features:",
             font=(
                 "Arial",
@@ -995,22 +1282,17 @@ class MachineLearningView:
                 "bold"
             )
         ).pack(
-            side="left",
-            padx=(0, 8)
-        )
-
-        top_features = (
-            feature_importance.head(
-                5
-            )
+            side="left"
         )
 
         for _, row in (
-            top_features.iterrows()
+            feature_importance.head(
+                5
+            ).iterrows()
         ):
 
             tk.Label(
-                feature_frame,
+                frame,
                 text=(
                     f"{row['Feature']}: "
                     f"{row['Importance'] * 100:.1f}%"
@@ -1025,7 +1307,7 @@ class MachineLearningView:
             )
 
     # ==================================================
-    # Prediction chart
+    # Historical validation chart
     # ==================================================
 
     def _create_prediction_chart(
@@ -1038,7 +1320,10 @@ class MachineLearningView:
     ):
 
         figure = Figure(
-            figsize=(10, 3.7),
+            figsize=(
+                10,
+                3.7
+            ),
             dpi=100
         )
 
@@ -1103,6 +1388,49 @@ class MachineLearningView:
         return figure
 
     # ==================================================
+    # Stats helper
+    # ==================================================
+
+    def _show_stats(
+        self,
+        container,
+        values,
+        bold=False
+    ):
+
+        for (
+            name,
+            value
+        ) in values:
+
+            if bold:
+
+                font = (
+                    "Arial",
+                    9,
+                    "bold"
+                )
+
+            else:
+
+                font = (
+                    "Arial",
+                    9
+                )
+
+            tk.Label(
+                container,
+                text=(
+                    f"{name}\n"
+                    f"{value}"
+                ),
+                font=font,
+                padx=10
+            ).pack(
+                side="left"
+            )
+
+    # ==================================================
     # Embed chart
     # ==================================================
 
@@ -1112,9 +1440,11 @@ class MachineLearningView:
         figure
     ):
 
-        canvas = FigureCanvasTkAgg(
-            figure,
-            master=container
+        canvas = (
+            FigureCanvasTkAgg(
+                figure,
+                master=container
+            )
         )
 
         canvas.draw()

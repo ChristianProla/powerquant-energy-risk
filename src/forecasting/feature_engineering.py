@@ -30,21 +30,25 @@ class FeatureEngineer:
             market_factors_dataframe.copy()
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # Timestamps
-        # --------------------------------------------------
+        # ==================================================
 
         prices[
             "TimeDK"
         ] = pd.to_datetime(
-            prices["TimeDK"],
+            prices[
+                "TimeDK"
+            ],
             errors="coerce"
         )
 
         factors[
             "TimeDK"
         ] = pd.to_datetime(
-            factors["TimeDK"],
+            factors[
+                "TimeDK"
+            ],
             errors="coerce"
         )
 
@@ -60,16 +64,18 @@ class FeatureEngineer:
             ]
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # Hourly electricity price
-        # --------------------------------------------------
+        # ==================================================
 
         prices[
             "Hour"
         ] = (
             prices[
                 "TimeDK"
-            ].dt.floor("h")
+            ].dt.floor(
+                "h"
+            )
         )
 
         hourly_prices = (
@@ -91,9 +97,9 @@ class FeatureEngineer:
             )
         )
 
-        # --------------------------------------------------
-        # Ensure all factor columns exist
-        # --------------------------------------------------
+        # ==================================================
+        # Factor columns
+        # ==================================================
 
         expected_factor_columns = [
             "WindGenerationMW",
@@ -108,24 +114,23 @@ class FeatureEngineer:
             expected_factor_columns
         ):
 
-            if column not in (
-                factors.columns
+            if (
+                column
+                not in factors.columns
             ):
 
                 factors[
                     column
                 ] = np.nan
 
-        # --------------------------------------------------
-        # Hourly factors
-        # --------------------------------------------------
-
         factors[
             "TimeDK"
         ] = (
             factors[
                 "TimeDK"
-            ].dt.floor("h")
+            ].dt.floor(
+                "h"
+            )
         )
 
         hourly_factors = (
@@ -138,9 +143,9 @@ class FeatureEngineer:
             .mean()
         )
 
-        # --------------------------------------------------
-        # Merge
-        # --------------------------------------------------
+        # ==================================================
+        # Merge price + market + weather
+        # ==================================================
 
         features = pd.merge(
             hourly_prices,
@@ -196,10 +201,56 @@ class FeatureEngineer:
             features[
                 "DayOfWeek"
             ] >= 5
-        ).astype(int)
+        ).astype(
+            int
+        )
 
         # ==================================================
-        # Energy system features
+        # Target-hour calendar
+        #
+        # These variables describe the NEXT hour,
+        # which is the hour we want to predict.
+        # ==================================================
+
+        target_time = (
+            features[
+                "TimeDK"
+            ]
+            + pd.Timedelta(
+                hours=1
+            )
+        )
+
+        features[
+            "TargetHourOfDay"
+        ] = (
+            target_time.dt.hour
+        )
+
+        features[
+            "TargetDayOfWeek"
+        ] = (
+            target_time.dt.dayofweek
+        )
+
+        features[
+            "TargetMonth"
+        ] = (
+            target_time.dt.month
+        )
+
+        features[
+            "TargetIsWeekend"
+        ] = (
+            features[
+                "TargetDayOfWeek"
+            ] >= 5
+        ).astype(
+            int
+        )
+
+        # ==================================================
+        # Energy-system features
         # ==================================================
 
         demand = (
@@ -221,7 +272,7 @@ class FeatureEngineer:
         )
 
         # ==================================================
-        # Price lag features
+        # Price lags
         # ==================================================
 
         features[
@@ -229,7 +280,9 @@ class FeatureEngineer:
         ] = (
             features[
                 "DayAheadPriceEUR"
-            ].shift(1)
+            ].shift(
+                1
+            )
         )
 
         features[
@@ -237,7 +290,9 @@ class FeatureEngineer:
         ] = (
             features[
                 "DayAheadPriceEUR"
-            ].shift(2)
+            ].shift(
+                2
+            )
         )
 
         features[
@@ -245,7 +300,9 @@ class FeatureEngineer:
         ] = (
             features[
                 "DayAheadPriceEUR"
-            ].shift(24)
+            ].shift(
+                24
+            )
         )
 
         # ==================================================
@@ -257,7 +314,9 @@ class FeatureEngineer:
         ] = (
             features[
                 "WindGenerationMW"
-            ].shift(1)
+            ].shift(
+                1
+            )
         )
 
         features[
@@ -265,11 +324,13 @@ class FeatureEngineer:
         ] = (
             features[
                 "ElectricityDemandMW"
-            ].shift(1)
+            ].shift(
+                1
+            )
         )
 
         # ==================================================
-        # Weather lag features
+        # Historical weather lags
         # ==================================================
 
         features[
@@ -277,7 +338,9 @@ class FeatureEngineer:
         ] = (
             features[
                 "WeatherWindSpeedMS"
-            ].shift(1)
+            ].shift(
+                1
+            )
         )
 
         features[
@@ -285,7 +348,9 @@ class FeatureEngineer:
         ] = (
             features[
                 "TemperatureC"
-            ].shift(1)
+            ].shift(
+                1
+            )
         )
 
         features[
@@ -293,7 +358,59 @@ class FeatureEngineer:
         ] = (
             features[
                 "CloudCoverPct"
-            ].shift(1)
+            ].shift(
+                1
+            )
+        )
+
+        # ==================================================
+        # Target-hour weather
+        #
+        # During historical training, the next observed
+        # weather hour acts as our target-hour weather.
+        #
+        # During live forecasting, this is replaced by
+        # an actual weather forecast.
+        # ==================================================
+
+        features[
+            "TargetTemperatureC"
+        ] = (
+            features[
+                "TemperatureC"
+            ].shift(
+                -1
+            )
+        )
+
+        features[
+            "TargetWeatherWindSpeedMS"
+        ] = (
+            features[
+                "WeatherWindSpeedMS"
+            ].shift(
+                -1
+            )
+        )
+
+        features[
+            "TargetCloudCoverPct"
+        ] = (
+            features[
+                "CloudCoverPct"
+            ].shift(
+                -1
+            )
+        )
+
+        features[
+            "TargetPrecipitationMM"
+        ] = (
+            features[
+                "PrecipitationMM"
+            ].shift(
+                -1
+            )
         )
 
         # ==================================================
@@ -354,9 +471,9 @@ class FeatureEngineer:
             ).mean()
         )
 
-        # --------------------------------------------------
+        # ==================================================
         # Clean
-        # --------------------------------------------------
+        # ==================================================
 
         features = features.replace(
             [
@@ -366,14 +483,16 @@ class FeatureEngineer:
             np.nan
         )
 
-        features = features.reset_index(
-            drop=True
+        features = (
+            features.reset_index(
+                drop=True
+            )
         )
 
         return features
 
     # ==================================================
-    # Factor statistics
+    # Market-factor statistics
     # ==================================================
 
     def calculate_factor_statistics(
@@ -383,7 +502,9 @@ class FeatureEngineer:
 
         if feature_dataframe.empty:
 
-            return self._empty_statistics()
+            return (
+                self._empty_statistics()
+            )
 
         data = (
             feature_dataframe.copy()
@@ -495,8 +616,9 @@ class FeatureEngineer:
         column
     ):
 
-        if column not in (
-            dataframe.columns
+        if (
+            column
+            not in dataframe.columns
         ):
 
             return 0
@@ -511,9 +633,12 @@ class FeatureEngineer:
             .dropna()
         )
 
-        if len(
-            clean_data
-        ) < 2:
+        if (
+            len(
+                clean_data
+            )
+            < 2
+        ):
 
             return 0
 
@@ -541,8 +666,9 @@ class FeatureEngineer:
         column
     ):
 
-        if column not in (
-            dataframe.columns
+        if (
+            column
+            not in dataframe.columns
         ):
 
             return 0
@@ -568,16 +694,39 @@ class FeatureEngineer:
     ):
 
         return {
-            "wind_price_correlation": 0,
-            "demand_price_correlation": 0,
-            "weather_wind_price_correlation": 0,
-            "temperature_price_correlation": 0,
-            "average_wind": 0,
-            "average_demand": 0,
-            "average_weather_wind": 0,
-            "average_temperature": 0,
-            "average_cloud_cover": 0,
-            "average_wind_ratio": 0,
-            "observations": 0,
-            "weather_observations": 0
+            "wind_price_correlation":
+                0,
+
+            "demand_price_correlation":
+                0,
+
+            "weather_wind_price_correlation":
+                0,
+
+            "temperature_price_correlation":
+                0,
+
+            "average_wind":
+                0,
+
+            "average_demand":
+                0,
+
+            "average_weather_wind":
+                0,
+
+            "average_temperature":
+                0,
+
+            "average_cloud_cover":
+                0,
+
+            "average_wind_ratio":
+                0,
+
+            "observations":
+                0,
+
+            "weather_observations":
+                0
         }
