@@ -12,6 +12,10 @@ from src.strategy.portfolio_simulation import (
     CapitalPortfolioSimulator
 )
 
+from src.strategy.performance_attribution import (
+    PerformanceAttributionAnalyzer
+)
+
 
 class PortfolioSimulationView:
 
@@ -26,6 +30,10 @@ class PortfolioSimulationView:
                 spread_analyzer,
                 backtester
             )
+        )
+
+        self.performance_analyzer = (
+            PerformanceAttributionAnalyzer()
         )
 
     # ==================================================
@@ -51,7 +59,7 @@ class PortfolioSimulationView:
             container,
             text=(
                 "Capital-Based Portfolio "
-                "& Position Sizing"
+                "& Strategy Performance"
             ),
             font=(
                 "Arial",
@@ -66,9 +74,9 @@ class PortfolioSimulationView:
         tk.Label(
             container,
             text=(
-                "Convert spread-strategy signals into "
-                "capital-based positions using a volatility "
-                "risk budget, exposure limits and position caps."
+                "Simulate capital-based position sizing "
+                "and analyse portfolio performance, risk "
+                "and strategy attribution."
             ),
             font=(
                 "Arial",
@@ -80,7 +88,7 @@ class PortfolioSimulationView:
         )
 
         # ==================================================
-        # Current strategy
+        # Strategy parameters
         # ==================================================
 
         strategy_frame = tk.Frame(
@@ -92,31 +100,29 @@ class PortfolioSimulationView:
             pady=(0, 8)
         )
 
-        strategy_values = [
-            (
-                "Window",
-                f"{window}h"
-            ),
-            (
-                "Entry Z",
-                f"±{entry_threshold:.1f}"
-            ),
-            (
-                "Exit Z",
-                f"±{exit_threshold:.1f}"
-            ),
-            (
-                "Cost / Leg",
-                (
-                    f"{transaction_cost:.2f} "
-                    f"EUR/MWh"
-                )
-            )
-        ]
-
         self._show_stats(
             strategy_frame,
-            strategy_values
+            [
+                (
+                    "Window",
+                    f"{window}h"
+                ),
+                (
+                    "Entry Z",
+                    f"±{entry_threshold:.1f}"
+                ),
+                (
+                    "Exit Z",
+                    f"±{exit_threshold:.1f}"
+                ),
+                (
+                    "Cost / Leg",
+                    (
+                        f"{transaction_cost:.2f} "
+                        f"EUR/MWh"
+                    )
+                )
+            ]
         )
 
         # ==================================================
@@ -254,7 +260,7 @@ class PortfolioSimulationView:
             width=6
         ).pack(
             side="left",
-            padx=(5, 10)
+            padx=(5, 5)
         )
 
         tk.Label(
@@ -265,8 +271,17 @@ class PortfolioSimulationView:
         )
 
         # ==================================================
-        # Output
+        # View buttons
         # ==================================================
+
+        button_frame = tk.Frame(
+            container
+        )
+
+        button_frame.pack(
+            fill="x",
+            pady=(0, 8)
+        )
 
         output_frame = tk.Frame(
             container
@@ -278,16 +293,12 @@ class PortfolioSimulationView:
         )
 
         # ==================================================
-        # Run simulation
+        # Run simulation helper
         # ==================================================
 
-        def run_simulation():
+        def get_simulation_results():
 
-            self._clear_frame(
-                output_frame
-            )
-
-            results = (
+            return (
                 self.simulator
                 .run_simulation(
                     spread_data,
@@ -316,6 +327,20 @@ class PortfolioSimulationView:
                 )
             )
 
+        # ==================================================
+        # Portfolio summary
+        # ==================================================
+
+        def show_portfolio_summary():
+
+            self._clear_frame(
+                output_frame
+            )
+
+            results = (
+                get_simulation_results()
+            )
+
             if not results[
                 "success"
             ]:
@@ -329,33 +354,150 @@ class PortfolioSimulationView:
 
                 return
 
-            self._show_results(
+            self._show_portfolio_results(
                 output_frame,
                 results,
                 time_range
             )
 
+        # ==================================================
+        # Performance dashboard
+        # ==================================================
+
+        def show_performance_dashboard():
+
+            self._clear_frame(
+                output_frame
+            )
+
+            tk.Label(
+                output_frame,
+                text=(
+                    "Calculating portfolio performance "
+                    "and attribution..."
+                ),
+                font=(
+                    "Arial",
+                    10,
+                    "bold"
+                )
+            ).pack(
+                anchor="w",
+                pady=15
+            )
+
+            container.update()
+
+            simulation_results = (
+                get_simulation_results()
+            )
+
+            self._clear_frame(
+                output_frame
+            )
+
+            if not simulation_results[
+                "success"
+            ]:
+
+                self._show_error(
+                    output_frame,
+                    simulation_results[
+                        "message"
+                    ]
+                )
+
+                return
+
+            if simulation_results[
+                "simulation_data"
+            ].empty:
+
+                self._show_error(
+                    output_frame,
+                    (
+                        "No completed trades are available "
+                        "for performance attribution."
+                    )
+                )
+
+                return
+
+            starting_capital = (
+                simulation_results[
+                    "statistics"
+                ][
+                    "starting_capital"
+                ]
+            )
+
+            attribution = (
+                self.performance_analyzer
+                .analyze(
+                    simulation_results[
+                        "simulation_data"
+                    ],
+                    simulation_results[
+                        "equity_curve"
+                    ],
+                    starting_capital
+                )
+            )
+
+            if not attribution[
+                "success"
+            ]:
+
+                self._show_error(
+                    output_frame,
+                    attribution[
+                        "message"
+                    ]
+                )
+
+                return
+
+            self._show_performance_results(
+                output_frame,
+                simulation_results,
+                attribution,
+                time_range
+            )
+
         tk.Button(
-            controls,
-            text="Run Portfolio Simulation",
+            button_frame,
+            text="Portfolio Summary",
             font=(
                 "Arial",
                 9,
                 "bold"
             ),
-            command=run_simulation
+            command=show_portfolio_summary
         ).pack(
             side="left",
-            padx=(15, 0)
+            padx=(0, 8)
         )
 
-        run_simulation()
+        tk.Button(
+            button_frame,
+            text="Performance Dashboard",
+            font=(
+                "Arial",
+                9,
+                "bold"
+            ),
+            command=show_performance_dashboard
+        ).pack(
+            side="left"
+        )
+
+        show_portfolio_summary()
 
     # ==================================================
-    # Results
+    # Portfolio summary
     # ==================================================
 
-    def _show_results(
+    def _show_portfolio_results(
         self,
         container,
         results,
@@ -370,10 +512,6 @@ class PortfolioSimulationView:
             "simulation_data"
         ]
 
-        # ==================================================
-        # Portfolio performance
-        # ==================================================
-
         row_1 = tk.Frame(
             container
         )
@@ -383,54 +521,48 @@ class PortfolioSimulationView:
             pady=(0, 5)
         )
 
-        values_1 = [
-            (
-                "Starting Capital",
-                (
-                    f"€{statistics['starting_capital']:,.0f}"
-                )
-            ),
-            (
-                "Ending Capital",
-                (
-                    f"€{statistics['ending_capital']:,.0f}"
-                )
-            ),
-            (
-                "Portfolio PnL",
-                (
-                    f"€{statistics['total_pnl']:+,.0f}"
-                )
-            ),
-            (
-                "Return",
-                (
-                    f"{statistics['total_return_percent']:+.2f}%"
-                )
-            ),
-            (
-                "Max Drawdown",
-                (
-                    f"{statistics['maximum_drawdown_percent']:.2f}%"
-                )
-            ),
-            (
-                "Trades",
-                statistics[
-                    "number_of_trades"
-                ]
-            )
-        ]
-
         self._show_stats(
             row_1,
-            values_1,
+            [
+                (
+                    "Starting Capital",
+                    (
+                        f"€{statistics['starting_capital']:,.0f}"
+                    )
+                ),
+                (
+                    "Ending Capital",
+                    (
+                        f"€{statistics['ending_capital']:,.0f}"
+                    )
+                ),
+                (
+                    "Portfolio PnL",
+                    (
+                        f"€{statistics['total_pnl']:+,.0f}"
+                    )
+                ),
+                (
+                    "Return",
+                    (
+                        f"{statistics['total_return_percent']:+.2f}%"
+                    )
+                ),
+                (
+                    "Max Drawdown",
+                    (
+                        f"{statistics['maximum_drawdown_percent']:.2f}%"
+                    )
+                ),
+                (
+                    "Trades",
+                    statistics[
+                        "number_of_trades"
+                    ]
+                )
+            ],
             bold=True
         )
-
-        # ==================================================
-        # Risk / exposure
-        # ==================================================
 
         row_2 = tk.Frame(
             container
@@ -441,61 +573,54 @@ class PortfolioSimulationView:
             pady=(0, 7)
         )
 
-        values_2 = [
-            (
-                "Win Rate",
-                (
-                    f"{statistics['win_rate']:.1f}%"
-                )
-            ),
-            (
-                "Avg Position",
-                (
-                    f"{statistics['average_position_size']:.2f} "
-                    f"MWh"
-                )
-            ),
-            (
-                "Peak Exposure",
-                (
-                    f"€{statistics['peak_gross_exposure']:,.0f}"
-                )
-            ),
-            (
-                "Max Leverage",
-                (
-                    f"{statistics['maximum_leverage']:.2f}x"
-                )
-            ),
-            (
-                "Avg Risk Used",
-                (
-                    f"{statistics['average_risk_utilization']:.2f}%"
-                )
-            ),
-            (
-                "Trading Costs",
-                (
-                    f"€{statistics['total_costs']:,.0f}"
-                )
-            )
-        ]
-
         self._show_stats(
             row_2,
-            values_2
+            [
+                (
+                    "Win Rate",
+                    (
+                        f"{statistics['win_rate']:.1f}%"
+                    )
+                ),
+                (
+                    "Avg Position",
+                    (
+                        f"{statistics['average_position_size']:.2f} MWh"
+                    )
+                ),
+                (
+                    "Peak Exposure",
+                    (
+                        f"€{statistics['peak_gross_exposure']:,.0f}"
+                    )
+                ),
+                (
+                    "Max Leverage",
+                    (
+                        f"{statistics['maximum_leverage']:.2f}x"
+                    )
+                ),
+                (
+                    "Avg Risk Used",
+                    (
+                        f"{statistics['average_risk_utilization']:.2f}%"
+                    )
+                ),
+                (
+                    "Trading Costs",
+                    (
+                        f"€{statistics['total_costs']:,.0f}"
+                    )
+                )
+            ]
         )
-
-        # ==================================================
-        # Explanation
-        # ==================================================
 
         tk.Label(
             container,
             text=(
                 "Risk sizing uses two rolling spread standard "
                 "deviations as an estimated adverse move. "
-                "This is a sizing model, not a guaranteed stop-loss."
+                "It is a sizing estimate, not a guaranteed loss limit."
             ),
             font=(
                 "Arial",
@@ -505,10 +630,6 @@ class PortfolioSimulationView:
             anchor="w",
             pady=(0, 6)
         )
-
-        # ==================================================
-        # Recent trades
-        # ==================================================
 
         if not simulation_data.empty:
 
@@ -530,16 +651,12 @@ class PortfolioSimulationView:
                 simulation_data
             )
 
-        # ==================================================
-        # Equity chart
-        # ==================================================
-
         if not results[
             "equity_curve"
         ].empty:
 
             figure = (
-                self._create_chart(
+                self._create_portfolio_chart(
                     results,
                     time_range
                 )
@@ -550,24 +667,435 @@ class PortfolioSimulationView:
                 figure
             )
 
+    # ==================================================
+    # Performance dashboard
+    # ==================================================
+
+    def _show_performance_results(
+        self,
+        container,
+        simulation_results,
+        attribution,
+        time_range
+    ):
+
+        tk.Label(
+            container,
+            text="Strategy Performance Dashboard",
+            font=(
+                "Arial",
+                11,
+                "bold"
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 5)
+        )
+
+        # ==================================================
+        # Main performance
+        # ==================================================
+
+        row_1 = tk.Frame(
+            container
+        )
+
+        row_1.pack(
+            fill="x",
+            pady=(0, 5)
+        )
+
+        profit_factor = (
+            attribution[
+                "profit_factor"
+            ]
+        )
+
+        if profit_factor == float(
+            "inf"
+        ):
+
+            profit_factor_text = "∞"
+
         else:
 
-            tk.Label(
-                container,
-                text=results[
-                    "message"
-                ],
-                font=(
-                    "Arial",
-                    10
-                )
-            ).pack(
-                anchor="w",
-                pady=20
+            profit_factor_text = (
+                f"{profit_factor:.2f}"
             )
 
+        self._show_stats(
+            row_1,
+            [
+                (
+                    "Total Return",
+                    (
+                        f"{attribution['total_return_percent']:+.2f}%"
+                    )
+                ),
+                (
+                    "Net PnL",
+                    (
+                        f"€{attribution['total_net_pnl']:+,.0f}"
+                    )
+                ),
+                (
+                    "Max Drawdown",
+                    (
+                        f"{attribution['maximum_drawdown_percent']:.2f}%"
+                    )
+                ),
+                (
+                    "Win Rate",
+                    (
+                        f"{attribution['win_rate']:.1f}%"
+                    )
+                ),
+                (
+                    "Profit Factor",
+                    profit_factor_text
+                ),
+                (
+                    "Trade Sharpe",
+                    (
+                        f"{attribution['trade_sharpe_proxy']:.2f}"
+                    )
+                )
+            ],
+            bold=True
+        )
+
+        # ==================================================
+        # Attribution / risk
+        # ==================================================
+
+        row_2 = tk.Frame(
+            container
+        )
+
+        row_2.pack(
+            fill="x",
+            pady=(0, 6)
+        )
+
+        self._show_stats(
+            row_2,
+            [
+                (
+                    "Cost Drag",
+                    (
+                        f"{attribution['cost_drag_percent']:.1f}%"
+                    )
+                ),
+                (
+                    "Return / Drawdown",
+                    (
+                        f"{attribution['return_to_drawdown']:.2f}"
+                    )
+                ),
+                (
+                    "Avg Position",
+                    (
+                        f"{attribution['average_position']:.2f} MWh"
+                    )
+                ),
+                (
+                    "Peak Exposure",
+                    (
+                        f"€{attribution['peak_exposure']:,.0f}"
+                    )
+                ),
+                (
+                    "Max Leverage",
+                    (
+                        f"{attribution['maximum_leverage']:.2f}x"
+                    )
+                ),
+                (
+                    "Profitable Months",
+                    (
+                        f"{attribution['profitable_month_percentage']:.1f}%"
+                    )
+                )
+            ]
+        )
+
+        # ==================================================
+        # Best / worst month
+        # ==================================================
+
+        row_3 = tk.Frame(
+            container
+        )
+
+        row_3.pack(
+            fill="x",
+            pady=(0, 7)
+        )
+
+        self._show_stats(
+            row_3,
+            [
+                (
+                    "Best Month",
+                    (
+                        f"{attribution['best_month']} "
+                        f"({attribution['best_month_return']:+.2f}%)"
+                    )
+                ),
+                (
+                    "Worst Month",
+                    (
+                        f"{attribution['worst_month']} "
+                        f"({attribution['worst_month_return']:+.2f}%)"
+                    )
+                ),
+                (
+                    "Best Trade",
+                    (
+                        f"€{attribution['best_trade']:+,.0f}"
+                    )
+                ),
+                (
+                    "Worst Trade",
+                    (
+                        f"€{attribution['worst_trade']:+,.0f}"
+                    )
+                )
+            ]
+        )
+
+        # ==================================================
+        # Direction attribution
+        # ==================================================
+
+        tk.Label(
+            container,
+            text="PnL Attribution by Trade Direction",
+            font=(
+                "Arial",
+                9,
+                "bold"
+            )
+        ).pack(
+            anchor="w",
+            pady=(0, 2)
+        )
+
+        self._create_direction_table(
+            container,
+            attribution[
+                "direction_attribution"
+            ]
+        )
+
+        # ==================================================
+        # Drawdown information
+        # ==================================================
+
+        drawdown = attribution[
+            "drawdown_analysis"
+        ]
+
+        if drawdown:
+
+            drawdown_frame = tk.Frame(
+                container
+            )
+
+            drawdown_frame.pack(
+                fill="x",
+                pady=(0, 6)
+            )
+
+            peak_text = (
+                pd_timestamp_text(
+                    drawdown[
+                        "peak_time"
+                    ]
+                )
+            )
+
+            trough_text = (
+                pd_timestamp_text(
+                    drawdown[
+                        "trough_time"
+                    ]
+                )
+            )
+
+            if (
+                drawdown[
+                    "recovery_time"
+                ]
+                is not None
+            ):
+
+                recovery_text = (
+                    pd_timestamp_text(
+                        drawdown[
+                            "recovery_time"
+                        ]
+                    )
+                )
+
+            else:
+
+                recovery_text = (
+                    drawdown[
+                        "recovery_status"
+                    ]
+                )
+
+            self._show_stats(
+                drawdown_frame,
+                [
+                    (
+                        "Drawdown Peak",
+                        peak_text
+                    ),
+                    (
+                        "Trough",
+                        trough_text
+                    ),
+                    (
+                        "Recovery",
+                        recovery_text
+                    )
+                ]
+            )
+
+        # ==================================================
+        # Dashboard chart
+        # ==================================================
+
+        figure = (
+            self._create_dashboard_chart(
+                simulation_results,
+                attribution,
+                time_range
+            )
+        )
+
+        self._embed_chart(
+            container,
+            figure
+        )
+
     # ==================================================
-    # Trade table
+    # Direction attribution table
+    # ==================================================
+
+    def _create_direction_table(
+        self,
+        container,
+        table
+    ):
+
+        frame = tk.Frame(
+            container
+        )
+
+        frame.pack(
+            fill="x",
+            pady=(0, 6)
+        )
+
+        headers = [
+            "Direction",
+            "Trades",
+            "Net PnL",
+            "Win %",
+            "Avg Trade",
+            "Costs"
+        ]
+
+        widths = [
+            23,
+            8,
+            13,
+            10,
+            12,
+            12
+        ]
+
+        for (
+            column,
+            header
+        ) in enumerate(
+            headers
+        ):
+
+            tk.Label(
+                frame,
+                text=header,
+                font=(
+                    "Arial",
+                    8,
+                    "bold"
+                ),
+                width=widths[
+                    column
+                ],
+                anchor="w"
+            ).grid(
+                row=0,
+                column=column
+            )
+
+        for (
+            row_number,
+            (_, row)
+        ) in enumerate(
+            table.iterrows(),
+            start=1
+        ):
+
+            values = [
+                row[
+                    "Direction"
+                ],
+                (
+                    f"{int(row['Trades'])}"
+                ),
+                (
+                    f"€{row['NetPnL']:+,.0f}"
+                ),
+                (
+                    f"{row['WinRate']:.1f}%"
+                ),
+                (
+                    f"€{row['AverageTrade']:+,.0f}"
+                ),
+                (
+                    f"€{row['Costs']:,.0f}"
+                )
+            ]
+
+            for (
+                column,
+                value
+            ) in enumerate(
+                values
+            ):
+
+                tk.Label(
+                    frame,
+                    text=value,
+                    font=(
+                        "Arial",
+                        8
+                    ),
+                    width=widths[
+                        column
+                    ],
+                    anchor="w"
+                ).grid(
+                    row=row_number,
+                    column=column
+                )
+
+    # ==================================================
+    # Recent trade table
     # ==================================================
 
     def _create_trade_table(
@@ -686,10 +1214,10 @@ class PortfolioSimulationView:
                 )
 
     # ==================================================
-    # Portfolio chart
+    # Portfolio summary chart
     # ==================================================
 
-    def _create_chart(
+    def _create_portfolio_chart(
         self,
         results,
         time_range
@@ -703,16 +1231,16 @@ class PortfolioSimulationView:
             dpi=100
         )
 
-        equity_axis = (
-            figure.add_subplot(
-                211
-            )
-        )
-
         equity_curve = (
             results[
                 "equity_curve"
             ]
+        )
+
+        equity_axis = (
+            figure.add_subplot(
+                211
+            )
         )
 
         equity_axis.plot(
@@ -758,10 +1286,6 @@ class PortfolioSimulationView:
         equity_axis.legend(
             fontsize=8
         )
-
-        # ==================================================
-        # Drawdown
-        # ==================================================
 
         drawdown_axis = (
             figure.add_subplot(
@@ -811,6 +1335,226 @@ class PortfolioSimulationView:
         )
 
         figure.tight_layout()
+
+        return figure
+
+    # ==================================================
+    # Performance dashboard chart
+    # ==================================================
+
+    def _create_dashboard_chart(
+        self,
+        simulation_results,
+        attribution,
+        time_range
+    ):
+
+        figure = Figure(
+            figsize=(
+                10,
+                6
+            ),
+            dpi=100
+        )
+
+        equity_curve = (
+            simulation_results[
+                "equity_curve"
+            ]
+        )
+
+        simulation_data = (
+            simulation_results[
+                "simulation_data"
+            ]
+        )
+
+        monthly = (
+            attribution[
+                "monthly_performance"
+            ]
+        )
+
+        # ==================================================
+        # Portfolio value
+        # ==================================================
+
+        equity_axis = (
+            figure.add_subplot(
+                221
+            )
+        )
+
+        equity_axis.plot(
+            equity_curve[
+                "TimeDK"
+            ],
+            equity_curve[
+                "PortfolioValue"
+            ],
+            linewidth=2
+        )
+
+        equity_axis.set_title(
+            "Portfolio Value"
+        )
+
+        equity_axis.set_ylabel(
+            "EUR"
+        )
+
+        equity_axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        self._format_dates(
+            equity_axis
+        )
+
+        # ==================================================
+        # Monthly returns
+        # ==================================================
+
+        monthly_axis = (
+            figure.add_subplot(
+                222
+            )
+        )
+
+        if not monthly.empty:
+
+            monthly_axis.bar(
+                monthly[
+                    "Month"
+                ],
+                monthly[
+                    "MonthlyReturnPercent"
+                ]
+            )
+
+            monthly_axis.tick_params(
+                axis="x",
+                rotation=45,
+                labelsize=7
+            )
+
+        monthly_axis.axhline(
+            y=0,
+            linewidth=1,
+            alpha=0.5
+        )
+
+        monthly_axis.set_title(
+            "Monthly Returns"
+        )
+
+        monthly_axis.set_ylabel(
+            "%"
+        )
+
+        monthly_axis.grid(
+            True,
+            axis="y",
+            alpha=0.3
+        )
+
+        # ==================================================
+        # Drawdown
+        # ==================================================
+
+        drawdown_axis = (
+            figure.add_subplot(
+                223
+            )
+        )
+
+        drawdown_axis.plot(
+            equity_curve[
+                "TimeDK"
+            ],
+            equity_curve[
+                "DrawdownPercent"
+            ]
+        )
+
+        drawdown_axis.axhline(
+            y=0,
+            linewidth=1,
+            alpha=0.5
+        )
+
+        drawdown_axis.set_title(
+            "Portfolio Drawdown"
+        )
+
+        drawdown_axis.set_ylabel(
+            "%"
+        )
+
+        drawdown_axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        self._format_dates(
+            drawdown_axis
+        )
+
+        # ==================================================
+        # Exposure
+        # ==================================================
+
+        exposure_axis = (
+            figure.add_subplot(
+                224
+            )
+        )
+
+        exposure_axis.plot(
+            simulation_data[
+                "EntryTime"
+            ],
+            simulation_data[
+                "GrossExposureEUR"
+            ],
+            marker="o",
+            markersize=3
+        )
+
+        exposure_axis.set_title(
+            "Gross Exposure by Trade"
+        )
+
+        exposure_axis.set_ylabel(
+            "EUR"
+        )
+
+        exposure_axis.grid(
+            True,
+            alpha=0.3
+        )
+
+        self._format_dates(
+            exposure_axis
+        )
+
+        figure.suptitle(
+            (
+                "Strategy Performance Dashboard "
+                f"- {time_range}"
+            ),
+            fontsize=12
+        )
+
+        figure.tight_layout(
+            rect=[
+                0,
+                0,
+                1,
+                0.96
+            ]
+        )
 
         return figure
 
@@ -923,3 +1667,28 @@ class PortfolioSimulationView:
         ):
 
             widget.destroy()
+
+
+# ==================================================
+# Timestamp formatting helper
+# ==================================================
+
+def pd_timestamp_text(
+    value
+):
+
+    if value is None:
+
+        return "N/A"
+
+    try:
+
+        return value.strftime(
+            "%Y-%m-%d"
+        )
+
+    except Exception:
+
+        return str(
+            value
+        )
