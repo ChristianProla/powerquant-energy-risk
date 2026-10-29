@@ -16,6 +16,10 @@ from src.strategy.performance_attribution import (
     PerformanceAttributionAnalyzer
 )
 
+from src.ui.live_monitoring_view import (
+    LiveStrategyMonitoringView
+)
+
 
 class PortfolioSimulationView:
 
@@ -34,6 +38,12 @@ class PortfolioSimulationView:
 
         self.performance_analyzer = (
             PerformanceAttributionAnalyzer()
+        )
+
+        self.live_monitoring_view = (
+            LiveStrategyMonitoringView(
+                spread_analyzer
+            )
         )
 
     # ==================================================
@@ -74,9 +84,8 @@ class PortfolioSimulationView:
         tk.Label(
             container,
             text=(
-                "Simulate capital-based position sizing "
-                "and analyse portfolio performance, risk "
-                "and strategy attribution."
+                "Simulate portfolio risk, analyse historical "
+                "performance and monitor the latest strategy signal."
             ),
             font=(
                 "Arial",
@@ -271,7 +280,7 @@ class PortfolioSimulationView:
         )
 
         # ==================================================
-        # View buttons
+        # Navigation
         # ==================================================
 
         button_frame = tk.Frame(
@@ -293,7 +302,7 @@ class PortfolioSimulationView:
         )
 
         # ==================================================
-        # Run simulation helper
+        # Simulation helper
         # ==================================================
 
         def get_simulation_results():
@@ -370,30 +379,8 @@ class PortfolioSimulationView:
                 output_frame
             )
 
-            tk.Label(
-                output_frame,
-                text=(
-                    "Calculating portfolio performance "
-                    "and attribution..."
-                ),
-                font=(
-                    "Arial",
-                    10,
-                    "bold"
-                )
-            ).pack(
-                anchor="w",
-                pady=15
-            )
-
-            container.update()
-
             simulation_results = (
                 get_simulation_results()
-            )
-
-            self._clear_frame(
-                output_frame
             )
 
             if not simulation_results[
@@ -464,6 +451,44 @@ class PortfolioSimulationView:
                 time_range
             )
 
+        # ==================================================
+        # Live/current monitoring
+        # ==================================================
+
+        def show_live_monitor():
+
+            self.live_monitoring_view.show(
+                output_frame,
+                spread_data,
+                time_range,
+                window=window,
+                entry_threshold=(
+                    entry_threshold
+                ),
+                exit_threshold=(
+                    exit_threshold
+                ),
+                transaction_cost=(
+                    transaction_cost
+                ),
+                capital=float(
+                    capital_variable.get()
+                ),
+                risk_per_trade=float(
+                    risk_variable.get()
+                ),
+                max_position=float(
+                    position_variable.get()
+                ),
+                max_exposure=float(
+                    exposure_variable.get()
+                )
+            )
+
+        # ==================================================
+        # Buttons
+        # ==================================================
+
         tk.Button(
             button_frame,
             text="Portfolio Summary",
@@ -487,6 +512,20 @@ class PortfolioSimulationView:
                 "bold"
             ),
             command=show_performance_dashboard
+        ).pack(
+            side="left",
+            padx=(0, 8)
+        )
+
+        tk.Button(
+            button_frame,
+            text="Current Signal Monitor",
+            font=(
+                "Arial",
+                9,
+                "bold"
+            ),
+            command=show_live_monitor
         ).pack(
             side="left"
         )
@@ -619,8 +658,7 @@ class PortfolioSimulationView:
             container,
             text=(
                 "Risk sizing uses two rolling spread standard "
-                "deviations as an estimated adverse move. "
-                "It is a sizing estimate, not a guaranteed loss limit."
+                "deviations as an estimated adverse move."
             ),
             font=(
                 "Arial",
@@ -692,10 +730,6 @@ class PortfolioSimulationView:
             pady=(0, 5)
         )
 
-        # ==================================================
-        # Main performance
-        # ==================================================
-
         row_1 = tk.Frame(
             container
         )
@@ -715,7 +749,9 @@ class PortfolioSimulationView:
             "inf"
         ):
 
-            profit_factor_text = "∞"
+            profit_factor_text = (
+                "∞"
+            )
 
         else:
 
@@ -763,10 +799,6 @@ class PortfolioSimulationView:
             ],
             bold=True
         )
-
-        # ==================================================
-        # Attribution / risk
-        # ==================================================
 
         row_2 = tk.Frame(
             container
@@ -819,10 +851,6 @@ class PortfolioSimulationView:
             ]
         )
 
-        # ==================================================
-        # Best / worst month
-        # ==================================================
-
         row_3 = tk.Frame(
             container
         )
@@ -864,10 +892,6 @@ class PortfolioSimulationView:
             ]
         )
 
-        # ==================================================
-        # Direction attribution
-        # ==================================================
-
         tk.Label(
             container,
             text="PnL Attribution by Trade Direction",
@@ -888,86 +912,6 @@ class PortfolioSimulationView:
             ]
         )
 
-        # ==================================================
-        # Drawdown information
-        # ==================================================
-
-        drawdown = attribution[
-            "drawdown_analysis"
-        ]
-
-        if drawdown:
-
-            drawdown_frame = tk.Frame(
-                container
-            )
-
-            drawdown_frame.pack(
-                fill="x",
-                pady=(0, 6)
-            )
-
-            peak_text = (
-                pd_timestamp_text(
-                    drawdown[
-                        "peak_time"
-                    ]
-                )
-            )
-
-            trough_text = (
-                pd_timestamp_text(
-                    drawdown[
-                        "trough_time"
-                    ]
-                )
-            )
-
-            if (
-                drawdown[
-                    "recovery_time"
-                ]
-                is not None
-            ):
-
-                recovery_text = (
-                    pd_timestamp_text(
-                        drawdown[
-                            "recovery_time"
-                        ]
-                    )
-                )
-
-            else:
-
-                recovery_text = (
-                    drawdown[
-                        "recovery_status"
-                    ]
-                )
-
-            self._show_stats(
-                drawdown_frame,
-                [
-                    (
-                        "Drawdown Peak",
-                        peak_text
-                    ),
-                    (
-                        "Trough",
-                        trough_text
-                    ),
-                    (
-                        "Recovery",
-                        recovery_text
-                    )
-                ]
-            )
-
-        # ==================================================
-        # Dashboard chart
-        # ==================================================
-
         figure = (
             self._create_dashboard_chart(
                 simulation_results,
@@ -982,7 +926,7 @@ class PortfolioSimulationView:
         )
 
     # ==================================================
-    # Direction attribution table
+    # Direction table
     # ==================================================
 
     def _create_direction_table(
@@ -1095,7 +1039,7 @@ class PortfolioSimulationView:
                 )
 
     # ==================================================
-    # Recent trade table
+    # Trade table
     # ==================================================
 
     def _create_trade_table(
@@ -1214,7 +1158,7 @@ class PortfolioSimulationView:
                 )
 
     # ==================================================
-    # Portfolio summary chart
+    # Portfolio chart
     # ==================================================
 
     def _create_portfolio_chart(
@@ -1339,7 +1283,7 @@ class PortfolioSimulationView:
         return figure
 
     # ==================================================
-    # Performance dashboard chart
+    # Dashboard chart
     # ==================================================
 
     def _create_dashboard_chart(
@@ -1375,10 +1319,6 @@ class PortfolioSimulationView:
             ]
         )
 
-        # ==================================================
-        # Portfolio value
-        # ==================================================
-
         equity_axis = (
             figure.add_subplot(
                 221
@@ -1391,16 +1331,11 @@ class PortfolioSimulationView:
             ],
             equity_curve[
                 "PortfolioValue"
-            ],
-            linewidth=2
+            ]
         )
 
         equity_axis.set_title(
             "Portfolio Value"
-        )
-
-        equity_axis.set_ylabel(
-            "EUR"
         )
 
         equity_axis.grid(
@@ -1411,10 +1346,6 @@ class PortfolioSimulationView:
         self._format_dates(
             equity_axis
         )
-
-        # ==================================================
-        # Monthly returns
-        # ==================================================
 
         monthly_axis = (
             figure.add_subplot(
@@ -1441,8 +1372,7 @@ class PortfolioSimulationView:
 
         monthly_axis.axhline(
             y=0,
-            linewidth=1,
-            alpha=0.5
+            linewidth=1
         )
 
         monthly_axis.set_title(
@@ -1452,16 +1382,6 @@ class PortfolioSimulationView:
         monthly_axis.set_ylabel(
             "%"
         )
-
-        monthly_axis.grid(
-            True,
-            axis="y",
-            alpha=0.3
-        )
-
-        # ==================================================
-        # Drawdown
-        # ==================================================
 
         drawdown_axis = (
             figure.add_subplot(
@@ -1480,8 +1400,7 @@ class PortfolioSimulationView:
 
         drawdown_axis.axhline(
             y=0,
-            linewidth=1,
-            alpha=0.5
+            linewidth=1
         )
 
         drawdown_axis.set_title(
@@ -1492,18 +1411,9 @@ class PortfolioSimulationView:
             "%"
         )
 
-        drawdown_axis.grid(
-            True,
-            alpha=0.3
-        )
-
         self._format_dates(
             drawdown_axis
         )
-
-        # ==================================================
-        # Exposure
-        # ==================================================
 
         exposure_axis = (
             figure.add_subplot(
@@ -1523,16 +1433,11 @@ class PortfolioSimulationView:
         )
 
         exposure_axis.set_title(
-            "Gross Exposure by Trade"
+            "Gross Exposure"
         )
 
         exposure_axis.set_ylabel(
             "EUR"
-        )
-
-        exposure_axis.grid(
-            True,
-            alpha=0.3
         )
 
         self._format_dates(
@@ -1667,28 +1572,3 @@ class PortfolioSimulationView:
         ):
 
             widget.destroy()
-
-
-# ==================================================
-# Timestamp formatting helper
-# ==================================================
-
-def pd_timestamp_text(
-    value
-):
-
-    if value is None:
-
-        return "N/A"
-
-    try:
-
-        return value.strftime(
-            "%Y-%m-%d"
-        )
-
-    except Exception:
-
-        return str(
-            value
-        )
