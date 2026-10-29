@@ -20,6 +20,10 @@ from src.ui.live_monitoring_view import (
     LiveStrategyMonitoringView
 )
 
+from src.ui.regime_analysis_view import (
+    RegimeAnalysisView
+)
+
 
 class PortfolioSimulationView:
 
@@ -44,6 +48,10 @@ class PortfolioSimulationView:
             LiveStrategyMonitoringView(
                 spread_analyzer
             )
+        )
+
+        self.regime_analysis_view = (
+            RegimeAnalysisView()
         )
 
     # ==================================================
@@ -85,7 +93,8 @@ class PortfolioSimulationView:
             container,
             text=(
                 "Simulate portfolio risk, analyse historical "
-                "performance and monitor the latest strategy signal."
+                "performance, monitor current signals and "
+                "study strategy behaviour across market regimes."
             ),
             font=(
                 "Arial",
@@ -452,7 +461,7 @@ class PortfolioSimulationView:
             )
 
         # ==================================================
-        # Live/current monitoring
+        # Current signal monitor
         # ==================================================
 
         def show_live_monitor():
@@ -486,6 +495,43 @@ class PortfolioSimulationView:
             )
 
         # ==================================================
+        # Regime analysis
+        # ==================================================
+
+        def show_regime_analysis():
+
+            self._clear_frame(
+                output_frame
+            )
+
+            simulation_results = (
+                get_simulation_results()
+            )
+
+            if not simulation_results[
+                "success"
+            ]:
+
+                self._show_error(
+                    output_frame,
+                    simulation_results[
+                        "message"
+                    ]
+                )
+
+                return
+
+            self.regime_analysis_view.show(
+                output_frame,
+                spread_data,
+                simulation_results[
+                    "simulation_data"
+                ],
+                time_range,
+                signal_window=window
+            )
+
+        # ==================================================
         # Buttons
         # ==================================================
 
@@ -500,7 +546,7 @@ class PortfolioSimulationView:
             command=show_portfolio_summary
         ).pack(
             side="left",
-            padx=(0, 8)
+            padx=(0, 7)
         )
 
         tk.Button(
@@ -514,7 +560,7 @@ class PortfolioSimulationView:
             command=show_performance_dashboard
         ).pack(
             side="left",
-            padx=(0, 8)
+            padx=(0, 7)
         )
 
         tk.Button(
@@ -526,6 +572,20 @@ class PortfolioSimulationView:
                 "bold"
             ),
             command=show_live_monitor
+        ).pack(
+            side="left",
+            padx=(0, 7)
+        )
+
+        tk.Button(
+            button_frame,
+            text="Regime Analysis",
+            font=(
+                "Arial",
+                9,
+                "bold"
+            ),
+            command=show_regime_analysis
         ).pack(
             side="left"
         )
