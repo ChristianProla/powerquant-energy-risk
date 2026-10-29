@@ -28,6 +28,10 @@ from src.ui.regime_aware_view import (
     RegimeAwareSizingView
 )
 
+from src.ui.executive_dashboard_view import (
+    ExecutiveDashboardView
+)
+
 
 class PortfolioSimulationView:
 
@@ -60,6 +64,13 @@ class PortfolioSimulationView:
 
         self.regime_aware_view = (
             RegimeAwareSizingView(
+                spread_analyzer,
+                backtester
+            )
+        )
+
+        self.executive_dashboard_view = (
+            ExecutiveDashboardView(
                 spread_analyzer,
                 backtester
             )
@@ -103,9 +114,9 @@ class PortfolioSimulationView:
         tk.Label(
             container,
             text=(
-                "Simulate portfolio risk, analyse performance, "
-                "monitor current signals and adapt position sizing "
-                "to changing market regimes."
+                "Portfolio simulation, performance analysis, "
+                "current strategy monitoring, market regimes "
+                "and adaptive risk management."
             ),
             font=(
                 "Arial",
@@ -322,7 +333,7 @@ class PortfolioSimulationView:
         )
 
         # ==================================================
-        # Simulation helper
+        # Base portfolio helper
         # ==================================================
 
         def get_simulation_results():
@@ -353,6 +364,40 @@ class PortfolioSimulationView:
                     max_gross_exposure_percent=float(
                         exposure_variable.get()
                     )
+                )
+            )
+
+        # ==================================================
+        # Executive dashboard
+        # ==================================================
+
+        def show_executive_dashboard():
+
+            self.executive_dashboard_view.show(
+                output_frame,
+                spread_data,
+                time_range,
+                window=window,
+                entry_threshold=(
+                    entry_threshold
+                ),
+                exit_threshold=(
+                    exit_threshold
+                ),
+                transaction_cost=(
+                    transaction_cost
+                ),
+                capital=float(
+                    capital_variable.get()
+                ),
+                risk_per_trade=float(
+                    risk_variable.get()
+                ),
+                max_position=float(
+                    position_variable.get()
+                ),
+                max_exposure=float(
+                    exposure_variable.get()
                 )
             )
 
@@ -390,7 +435,7 @@ class PortfolioSimulationView:
             )
 
         # ==================================================
-        # Performance dashboard
+        # Performance
         # ==================================================
 
         def show_performance_dashboard():
@@ -430,14 +475,6 @@ class PortfolioSimulationView:
 
                 return
 
-            starting_capital = (
-                simulation_results[
-                    "statistics"
-                ][
-                    "starting_capital"
-                ]
-            )
-
             attribution = (
                 self.performance_analyzer
                 .analyze(
@@ -447,7 +484,11 @@ class PortfolioSimulationView:
                     simulation_results[
                         "equity_curve"
                     ],
-                    starting_capital
+                    simulation_results[
+                        "statistics"
+                    ][
+                        "starting_capital"
+                    ]
                 )
             )
 
@@ -475,7 +516,7 @@ class PortfolioSimulationView:
         # Current signal
         # ==================================================
 
-        def show_live_monitor():
+        def show_current_signal():
 
             self.live_monitoring_view.show(
                 output_frame,
@@ -543,7 +584,7 @@ class PortfolioSimulationView:
             )
 
         # ==================================================
-        # Regime-aware position sizing
+        # Regime-aware sizing
         # ==================================================
 
         def show_regime_aware():
@@ -582,6 +623,20 @@ class PortfolioSimulationView:
 
         tk.Button(
             button_frame,
+            text="Executive Dashboard",
+            font=(
+                "Arial",
+                8,
+                "bold"
+            ),
+            command=show_executive_dashboard
+        ).pack(
+            side="left",
+            padx=(0, 5)
+        )
+
+        tk.Button(
+            button_frame,
             text="Portfolio Summary",
             font=(
                 "Arial",
@@ -616,7 +671,7 @@ class PortfolioSimulationView:
                 8,
                 "bold"
             ),
-            command=show_live_monitor
+            command=show_current_signal
         ).pack(
             side="left",
             padx=(0, 5)
@@ -638,7 +693,7 @@ class PortfolioSimulationView:
 
         tk.Button(
             button_frame,
-            text="Regime-Aware Sizing",
+            text="Regime-Aware",
             font=(
                 "Arial",
                 8,
@@ -649,7 +704,11 @@ class PortfolioSimulationView:
             side="left"
         )
 
-        show_portfolio_summary()
+        # ==================================================
+        # Open executive view by default
+        # ==================================================
+
+        show_executive_dashboard()
 
     # ==================================================
     # Portfolio summary
@@ -662,13 +721,17 @@ class PortfolioSimulationView:
         time_range
     ):
 
-        statistics = results[
-            "statistics"
-        ]
+        statistics = (
+            results[
+                "statistics"
+            ]
+        )
 
-        simulation_data = results[
-            "simulation_data"
-        ]
+        simulation_data = (
+            results[
+                "simulation_data"
+            ]
+        )
 
         row_1 = tk.Frame(
             container
@@ -773,21 +836,6 @@ class PortfolioSimulationView:
             ]
         )
 
-        tk.Label(
-            container,
-            text=(
-                "Risk sizing uses two rolling spread standard "
-                "deviations as an estimated adverse move."
-            ),
-            font=(
-                "Arial",
-                8
-            )
-        ).pack(
-            anchor="w",
-            pady=(0, 6)
-        )
-
         if not simulation_data.empty:
 
             tk.Label(
@@ -825,7 +873,7 @@ class PortfolioSimulationView:
             )
 
     # ==================================================
-    # Performance dashboard
+    # Performance
     # ==================================================
 
     def _show_performance_results(
@@ -923,7 +971,7 @@ class PortfolioSimulationView:
 
         row_2.pack(
             fill="x",
-            pady=(0, 6)
+            pady=(0, 7)
         )
 
         self._show_stats(
@@ -963,47 +1011,6 @@ class PortfolioSimulationView:
                     "Profitable Months",
                     (
                         f"{attribution['profitable_month_percentage']:.1f}%"
-                    )
-                )
-            ]
-        )
-
-        row_3 = tk.Frame(
-            container
-        )
-
-        row_3.pack(
-            fill="x",
-            pady=(0, 7)
-        )
-
-        self._show_stats(
-            row_3,
-            [
-                (
-                    "Best Month",
-                    (
-                        f"{attribution['best_month']} "
-                        f"({attribution['best_month_return']:+.2f}%)"
-                    )
-                ),
-                (
-                    "Worst Month",
-                    (
-                        f"{attribution['worst_month']} "
-                        f"({attribution['worst_month_return']:+.2f}%)"
-                    )
-                ),
-                (
-                    "Best Trade",
-                    (
-                        f"€{attribution['best_trade']:+,.0f}"
-                    )
-                ),
-                (
-                    "Worst Trade",
-                    (
-                        f"€{attribution['worst_trade']:+,.0f}"
                     )
                 )
             ]
@@ -1079,10 +1086,7 @@ class PortfolioSimulationView:
             12
         ]
 
-        for (
-            column,
-            header
-        ) in enumerate(
+        for column, header in enumerate(
             headers
         ):
 
@@ -1115,27 +1119,14 @@ class PortfolioSimulationView:
                 row[
                     "Direction"
                 ],
-                (
-                    f"{int(row['Trades'])}"
-                ),
-                (
-                    f"€{row['NetPnL']:+,.0f}"
-                ),
-                (
-                    f"{row['WinRate']:.1f}%"
-                ),
-                (
-                    f"€{row['AverageTrade']:+,.0f}"
-                ),
-                (
-                    f"€{row['Costs']:,.0f}"
-                )
+                f"{int(row['Trades'])}",
+                f"€{row['NetPnL']:+,.0f}",
+                f"{row['WinRate']:.1f}%",
+                f"€{row['AverageTrade']:+,.0f}",
+                f"€{row['Costs']:,.0f}"
             ]
 
-            for (
-                column,
-                value
-            ) in enumerate(
+            for column, value in enumerate(
                 values
             ):
 
@@ -1192,10 +1183,7 @@ class PortfolioSimulationView:
             15
         ]
 
-        for (
-            column,
-            header
-        ) in enumerate(
+        for column, header in enumerate(
             headers
         ):
 
@@ -1216,17 +1204,13 @@ class PortfolioSimulationView:
                 column=column
             )
 
-        recent_trades = (
-            simulation_data.tail(
-                5
-            )
-        )
-
         for (
             row_number,
             (_, trade)
         ) in enumerate(
-            recent_trades.iterrows(),
+            simulation_data.tail(
+                5
+            ).iterrows(),
             start=1
         ):
 
@@ -1251,10 +1235,7 @@ class PortfolioSimulationView:
                 ]
             ]
 
-            for (
-                column,
-                value
-            ) in enumerate(
+            for column, value in enumerate(
                 values
             ):
 
@@ -1311,21 +1292,7 @@ class PortfolioSimulationView:
             equity_curve[
                 "PortfolioValue"
             ],
-            label="Portfolio Value",
-            linewidth=2
-        )
-
-        equity_axis.axhline(
-            y=(
-                results[
-                    "statistics"
-                ][
-                    "starting_capital"
-                ]
-            ),
-            linestyle="--",
-            linewidth=1,
-            label="Starting Capital"
+            label="Portfolio Value"
         )
 
         equity_axis.set_title(
@@ -1336,7 +1303,7 @@ class PortfolioSimulationView:
         )
 
         equity_axis.set_ylabel(
-            "Portfolio Value (EUR)"
+            "EUR"
         )
 
         equity_axis.grid(
@@ -1344,8 +1311,8 @@ class PortfolioSimulationView:
             alpha=0.3
         )
 
-        equity_axis.legend(
-            fontsize=8
+        self._format_dates(
+            equity_axis
         )
 
         drawdown_axis = (
@@ -1361,34 +1328,25 @@ class PortfolioSimulationView:
             equity_curve[
                 "DrawdownPercent"
             ],
-            label="Portfolio Drawdown"
+            label="Drawdown"
         )
 
         drawdown_axis.axhline(
             y=0,
-            linewidth=1,
-            alpha=0.5
+            linewidth=1
+        )
+
+        drawdown_axis.set_ylabel(
+            "%"
         )
 
         drawdown_axis.set_xlabel(
             "Time"
         )
 
-        drawdown_axis.set_ylabel(
-            "Drawdown (%)"
-        )
-
         drawdown_axis.grid(
             True,
             alpha=0.3
-        )
-
-        drawdown_axis.legend(
-            fontsize=8
-        )
-
-        self._format_dates(
-            equity_axis
         )
 
         self._format_dates(
@@ -1400,7 +1358,7 @@ class PortfolioSimulationView:
         return figure
 
     # ==================================================
-    # Performance dashboard chart
+    # Performance chart
     # ==================================================
 
     def _create_dashboard_chart(
@@ -1413,7 +1371,7 @@ class PortfolioSimulationView:
         figure = Figure(
             figsize=(
                 10,
-                6
+                5.5
             ),
             dpi=100
         )
@@ -1424,21 +1382,11 @@ class PortfolioSimulationView:
             ]
         )
 
-        simulation_data = (
-            simulation_results[
-                "simulation_data"
-            ]
-        )
-
         monthly = (
             attribution[
                 "monthly_performance"
             ]
         )
-
-        # ==================================================
-        # Portfolio value
-        # ==================================================
 
         equity_axis = (
             figure.add_subplot(
@@ -1459,18 +1407,9 @@ class PortfolioSimulationView:
             "Portfolio Value"
         )
 
-        equity_axis.grid(
-            True,
-            alpha=0.3
-        )
-
         self._format_dates(
             equity_axis
         )
-
-        # ==================================================
-        # Monthly returns
-        # ==================================================
 
         monthly_axis = (
             figure.add_subplot(
@@ -1495,22 +1434,9 @@ class PortfolioSimulationView:
                 labelsize=7
             )
 
-        monthly_axis.axhline(
-            y=0,
-            linewidth=1
-        )
-
         monthly_axis.set_title(
             "Monthly Returns"
         )
-
-        monthly_axis.set_ylabel(
-            "%"
-        )
-
-        # ==================================================
-        # Drawdown
-        # ==================================================
 
         drawdown_axis = (
             figure.add_subplot(
@@ -1527,31 +1453,24 @@ class PortfolioSimulationView:
             ]
         )
 
-        drawdown_axis.axhline(
-            y=0,
-            linewidth=1
-        )
-
         drawdown_axis.set_title(
-            "Portfolio Drawdown"
-        )
-
-        drawdown_axis.set_ylabel(
-            "%"
+            "Drawdown"
         )
 
         self._format_dates(
             drawdown_axis
         )
 
-        # ==================================================
-        # Exposure
-        # ==================================================
-
         exposure_axis = (
             figure.add_subplot(
                 224
             )
+        )
+
+        simulation_data = (
+            simulation_results[
+                "simulation_data"
+            ]
         )
 
         exposure_axis.plot(
@@ -1569,20 +1488,15 @@ class PortfolioSimulationView:
             "Gross Exposure"
         )
 
-        exposure_axis.set_ylabel(
-            "EUR"
-        )
-
         self._format_dates(
             exposure_axis
         )
 
         figure.suptitle(
             (
-                "Strategy Performance Dashboard "
+                "Strategy Performance "
                 f"- {time_range}"
-            ),
-            fontsize=12
+            )
         )
 
         figure.tight_layout(
@@ -1630,10 +1544,7 @@ class PortfolioSimulationView:
         bold=False
     ):
 
-        for (
-            name,
-            value
-        ) in values:
+        for name, value in values:
 
             font = (
                 "Arial",
