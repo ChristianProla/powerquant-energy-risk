@@ -24,6 +24,10 @@ from src.ui.regime_analysis_view import (
     RegimeAnalysisView
 )
 
+from src.ui.regime_aware_view import (
+    RegimeAwareSizingView
+)
+
 
 class PortfolioSimulationView:
 
@@ -52,6 +56,13 @@ class PortfolioSimulationView:
 
         self.regime_analysis_view = (
             RegimeAnalysisView()
+        )
+
+        self.regime_aware_view = (
+            RegimeAwareSizingView(
+                spread_analyzer,
+                backtester
+            )
         )
 
     # ==================================================
@@ -92,9 +103,9 @@ class PortfolioSimulationView:
         tk.Label(
             container,
             text=(
-                "Simulate portfolio risk, analyse historical "
-                "performance, monitor current signals and "
-                "study strategy behaviour across market regimes."
+                "Simulate portfolio risk, analyse performance, "
+                "monitor current signals and adapt position sizing "
+                "to changing market regimes."
             ),
             font=(
                 "Arial",
@@ -461,7 +472,7 @@ class PortfolioSimulationView:
             )
 
         # ==================================================
-        # Current signal monitor
+        # Current signal
         # ==================================================
 
         def show_live_monitor():
@@ -532,6 +543,40 @@ class PortfolioSimulationView:
             )
 
         # ==================================================
+        # Regime-aware position sizing
+        # ==================================================
+
+        def show_regime_aware():
+
+            self.regime_aware_view.show(
+                output_frame,
+                spread_data,
+                time_range,
+                window=window,
+                entry_threshold=(
+                    entry_threshold
+                ),
+                exit_threshold=(
+                    exit_threshold
+                ),
+                transaction_cost=(
+                    transaction_cost
+                ),
+                capital=float(
+                    capital_variable.get()
+                ),
+                risk_per_trade=float(
+                    risk_variable.get()
+                ),
+                max_position=float(
+                    position_variable.get()
+                ),
+                max_exposure=float(
+                    exposure_variable.get()
+                )
+            )
+
+        # ==================================================
         # Buttons
         # ==================================================
 
@@ -540,41 +585,41 @@ class PortfolioSimulationView:
             text="Portfolio Summary",
             font=(
                 "Arial",
-                9,
+                8,
                 "bold"
             ),
             command=show_portfolio_summary
         ).pack(
             side="left",
-            padx=(0, 7)
+            padx=(0, 5)
         )
 
         tk.Button(
             button_frame,
-            text="Performance Dashboard",
+            text="Performance",
             font=(
                 "Arial",
-                9,
+                8,
                 "bold"
             ),
             command=show_performance_dashboard
         ).pack(
             side="left",
-            padx=(0, 7)
+            padx=(0, 5)
         )
 
         tk.Button(
             button_frame,
-            text="Current Signal Monitor",
+            text="Current Signal",
             font=(
                 "Arial",
-                9,
+                8,
                 "bold"
             ),
             command=show_live_monitor
         ).pack(
             side="left",
-            padx=(0, 7)
+            padx=(0, 5)
         )
 
         tk.Button(
@@ -582,10 +627,24 @@ class PortfolioSimulationView:
             text="Regime Analysis",
             font=(
                 "Arial",
-                9,
+                8,
                 "bold"
             ),
             command=show_regime_analysis
+        ).pack(
+            side="left",
+            padx=(0, 5)
+        )
+
+        tk.Button(
+            button_frame,
+            text="Regime-Aware Sizing",
+            font=(
+                "Arial",
+                8,
+                "bold"
+            ),
+            command=show_regime_aware
         ).pack(
             side="left"
         )
@@ -809,9 +868,7 @@ class PortfolioSimulationView:
             "inf"
         ):
 
-            profit_factor_text = (
-                "∞"
-            )
+            profit_factor_text = "∞"
 
         else:
 
@@ -1343,7 +1400,7 @@ class PortfolioSimulationView:
         return figure
 
     # ==================================================
-    # Dashboard chart
+    # Performance dashboard chart
     # ==================================================
 
     def _create_dashboard_chart(
@@ -1379,6 +1436,10 @@ class PortfolioSimulationView:
             ]
         )
 
+        # ==================================================
+        # Portfolio value
+        # ==================================================
+
         equity_axis = (
             figure.add_subplot(
                 221
@@ -1406,6 +1467,10 @@ class PortfolioSimulationView:
         self._format_dates(
             equity_axis
         )
+
+        # ==================================================
+        # Monthly returns
+        # ==================================================
 
         monthly_axis = (
             figure.add_subplot(
@@ -1443,6 +1508,10 @@ class PortfolioSimulationView:
             "%"
         )
 
+        # ==================================================
+        # Drawdown
+        # ==================================================
+
         drawdown_axis = (
             figure.add_subplot(
                 223
@@ -1474,6 +1543,10 @@ class PortfolioSimulationView:
         self._format_dates(
             drawdown_axis
         )
+
+        # ==================================================
+        # Exposure
+        # ==================================================
 
         exposure_axis = (
             figure.add_subplot(
