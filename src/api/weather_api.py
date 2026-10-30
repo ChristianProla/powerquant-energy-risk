@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pandas as pd
 import requests
@@ -16,24 +16,71 @@ class WeatherAPI:
             "https://api.open-meteo.com/v1/forecast"
         )
 
+        self.timezone = (
+            "Europe/Copenhagen"
+        )
+
+        # ==================================================
         # Representative weather locations
-        # for the two Danish electricity areas.
+        # for the Danish electricity areas
         #
         # DK1 -> Aarhus
         # DK2 -> Copenhagen
+        #
+        # These are geographic proxies for each price area,
+        # not complete regional weather representations.
+        # ==================================================
 
         self.locations = {
             "DK1": {
-                "latitude": 56.1629,
-                "longitude": 10.2039,
-                "name": "Aarhus"
+                "latitude":
+                    56.1629,
+
+                "longitude":
+                    10.2039,
+
+                "name":
+                    "Aarhus"
             },
+
             "DK2": {
-                "latitude": 55.6761,
-                "longitude": 12.5683,
-                "name": "Copenhagen"
+                "latitude":
+                    55.6761,
+
+                "longitude":
+                    12.5683,
+
+                "name":
+                    "Copenhagen"
             }
         }
+
+    # ==================================================
+    # Copenhagen-local current time
+    #
+    # Open-Meteo returns local Danish timestamps because
+    # requests use timezone="Europe/Copenhagen".
+    #
+    # We therefore compare those timestamps with a Danish
+    # local clock rather than the computer's local timezone.
+    #
+    # tz_localize(None) deliberately keeps the Danish local
+    # clock time while returning the naive timestamps used
+    # elsewhere in PowerQuant.
+    # ==================================================
+
+    def _current_copenhagen_time(
+        self
+    ):
+
+        return (
+            pd.Timestamp.now(
+                tz=self.timezone
+            )
+            .tz_localize(
+                None
+            )
+        )
 
     # ==================================================
     # Historical + recent weather
@@ -61,6 +108,16 @@ class WeatherAPI:
                 end_date
             )
         )
+
+        if (
+            start_timestamp
+            >
+            end_timestamp
+        ):
+
+            return (
+                self._empty_dataframe()
+            )
 
         historical_data = (
             self._get_historical_weather(
@@ -94,7 +151,9 @@ class WeatherAPI:
 
         if not frames:
 
-            return self._empty_dataframe()
+            return (
+                self._empty_dataframe()
+            )
 
         weather = pd.concat(
             frames,
@@ -102,32 +161,38 @@ class WeatherAPI:
         )
 
         weather = (
-            weather.drop_duplicates(
+            weather
+            .drop_duplicates(
                 subset=[
                     "TimeDK"
                 ],
                 keep="last"
             )
-        )
-
-        weather = weather.sort_values(
-            "TimeDK"
+            .sort_values(
+                "TimeDK"
+            )
         )
 
         weather = weather[
             (
-                weather["TimeDK"]
+                weather[
+                    "TimeDK"
+                ]
                 >= start_timestamp
             )
             &
             (
-                weather["TimeDK"]
+                weather[
+                    "TimeDK"
+                ]
                 <= end_timestamp
             )
         ]
 
-        weather = weather.reset_index(
-            drop=True
+        weather = (
+            weather.reset_index(
+                drop=True
+            )
         )
 
         return weather
@@ -146,20 +211,37 @@ class WeatherAPI:
             price_area
         )
 
-        location = self.locations[
-            price_area
-        ]
+        try:
+
+            requested_hours = int(
+                forecast_hours
+            )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            return (
+                self._empty_dataframe()
+            )
 
         requested_hours = max(
             1,
             min(
-                int(forecast_hours),
+                requested_hours,
                 72
             )
         )
 
-        # Request one extra hour because the API
-        # can include the current hour.
+        location = self.locations[
+            price_area
+        ]
+
+        # --------------------------------------------------
+        # Request a few extra hours because the API response
+        # can include the current local hour.
+        # --------------------------------------------------
 
         params = {
             "latitude":
@@ -184,19 +266,30 @@ class WeatherAPI:
                 "ms",
 
             "forecast_hours":
-                requested_hours + 2,
+                requested_hours + 3,
 
             "timezone":
-                "Europe/Copenhagen"
+                self.timezone
         }
 
-        response = requests.get(
-            self.forecast_url,
-            params=params,
-            timeout=20
-        )
+        try:
 
-        response.raise_for_status()
+            response = requests.get(
+                self.forecast_url,
+                params=params,
+                timeout=20
+            )
+
+            response.raise_for_status()
+
+        except (
+            requests.exceptions
+            .RequestException
+        ):
+
+            return (
+                self._empty_dataframe()
+            )
 
         dataframe = (
             self._convert_response(
@@ -209,26 +302,44 @@ class WeatherAPI:
 
             return dataframe
 
-        # We only want future hours,
-        # not the current hour.
+        # ==================================================
+        # Future hours only
+        #
+        # Critical:
+        # compare Danish API timestamps with Danish current
+        # local time, not the machine's timezone.
+        # ==================================================
 
         current_hour = (
-            pd.Timestamp.now()
-            .floor("h")
+            self._current_copenhagen_time()
+            .floor(
+                "h"
+            )
         )
 
-        dataframe = dataframe[
+        dataframe = (
             dataframe[
+                dataframe[
+                    "TimeDK"
+                ]
+                >
+                current_hour
+            ]
+            .sort_values(
                 "TimeDK"
-            ] > current_hour
-        ]
-
-        dataframe = dataframe.head(
-            requested_hours
-        )
-
-        dataframe = dataframe.reset_index(
-            drop=True
+            )
+            .drop_duplicates(
+                subset=[
+                    "TimeDK"
+                ],
+                keep="last"
+            )
+            .head(
+                requested_hours
+            )
+            .reset_index(
+                drop=True
+            )
         )
 
         return dataframe
@@ -244,15 +355,19 @@ class WeatherAPI:
         end_timestamp
     ):
 
+        # --------------------------------------------------
+        # Open-Meteo archive data is available with a delay.
+        #
+        # Keep a conservative six-day boundary between the
+        # archive endpoint and recent forecast endpoint.
+        # --------------------------------------------------
+
         archive_end = (
-            pd.Timestamp(
-                datetime.now()
-                - timedelta(
-                    days=6
-                )
+            self._current_copenhagen_time()
+            - timedelta(
+                days=6
             )
-            .normalize()
-        )
+        ).normalize()
 
         if (
             start_timestamp
@@ -305,7 +420,7 @@ class WeatherAPI:
                 "ms",
 
             "timezone":
-                "Europe/Copenhagen"
+                self.timezone
         }
 
         try:
@@ -335,7 +450,7 @@ class WeatherAPI:
         )
 
     # ==================================================
-    # Recent observed / forecast weather
+    # Recent weather
     # ==================================================
 
     def _get_recent_weather(
@@ -378,7 +493,7 @@ class WeatherAPI:
                 1,
 
             "timezone":
-                "Europe/Copenhagen"
+                self.timezone
         }
 
         try:
@@ -427,14 +542,26 @@ class WeatherAPI:
             )
         ]
 
-        dataframe = dataframe.reset_index(
-            drop=True
+        dataframe = (
+            dataframe
+            .sort_values(
+                "TimeDK"
+            )
+            .drop_duplicates(
+                subset=[
+                    "TimeDK"
+                ],
+                keep="last"
+            )
+            .reset_index(
+                drop=True
+            )
         )
 
         return dataframe
 
     # ==================================================
-    # Convert API response
+    # Convert Open-Meteo response
     # ==================================================
 
     def _convert_response(
@@ -443,10 +570,28 @@ class WeatherAPI:
         price_area
     ):
 
+        if not isinstance(
+            response_data,
+            dict
+        ):
+
+            return (
+                self._empty_dataframe()
+            )
+
         hourly = response_data.get(
             "hourly",
             {}
         )
+
+        if not isinstance(
+            hourly,
+            dict
+        ):
+
+            return (
+                self._empty_dataframe()
+            )
 
         times = hourly.get(
             "time",
@@ -474,7 +619,9 @@ class WeatherAPI:
             if (
                 values is None
                 or
-                len(values)
+                len(
+                    values
+                )
                 != number_of_rows
             ):
 
@@ -542,7 +689,9 @@ class WeatherAPI:
 
         dataframe[
             "PriceArea"
-        ] = price_area
+        ] = (
+            price_area
+        )
 
         dataframe[
             "WeatherLocation"
@@ -555,21 +704,22 @@ class WeatherAPI:
         )
 
         dataframe = (
-            dataframe.dropna(
+            dataframe
+            .dropna(
                 subset=[
                     "TimeDK"
                 ]
             )
-        )
-
-        dataframe = (
-            dataframe.sort_values(
+            .sort_values(
                 "TimeDK"
             )
-        )
-
-        dataframe = (
-            dataframe.reset_index(
+            .drop_duplicates(
+                subset=[
+                    "TimeDK"
+                ],
+                keep="last"
+            )
+            .reset_index(
                 drop=True
             )
         )
@@ -577,7 +727,7 @@ class WeatherAPI:
         return dataframe
 
     # ==================================================
-    # Validate area
+    # Validate price area
     # ==================================================
 
     def _validate_price_area(
@@ -606,8 +756,8 @@ class WeatherAPI:
         start_date
     ):
 
-        now = pd.Timestamp(
-            datetime.now()
+        now = (
+            self._current_copenhagen_time()
         )
 
         relative_ranges = {
@@ -656,7 +806,7 @@ class WeatherAPI:
 
         try:
 
-            return pd.Timestamp(
+            timestamp = pd.Timestamp(
                 start_date
             )
 
@@ -669,31 +819,71 @@ class WeatherAPI:
                 )
             )
 
+        # --------------------------------------------------
+        # If an explicit timezone-aware timestamp is supplied,
+        # convert it to Copenhagen local time before removing
+        # timezone information.
+        # --------------------------------------------------
+
+        if (
+            timestamp.tzinfo
+            is not None
+        ):
+
+            timestamp = (
+                timestamp
+                .tz_convert(
+                    self.timezone
+                )
+                .tz_localize(
+                    None
+                )
+            )
+
+        return timestamp
+
     def _resolve_end_date(
         self,
         end_date
     ):
+
+        now = (
+            self._current_copenhagen_time()
+        )
 
         if (
             end_date
             == "now"
         ):
 
-            return pd.Timestamp(
-                datetime.now()
-            )
+            return now
 
         try:
 
-            return pd.Timestamp(
+            timestamp = pd.Timestamp(
                 end_date
             )
 
         except Exception:
 
-            return pd.Timestamp(
-                datetime.now()
+            return now
+
+        if (
+            timestamp.tzinfo
+            is not None
+        ):
+
+            timestamp = (
+                timestamp
+                .tz_convert(
+                    self.timezone
+                )
+                .tz_localize(
+                    None
+                )
             )
+
+        return timestamp
 
     # ==================================================
     # Empty dataframe
