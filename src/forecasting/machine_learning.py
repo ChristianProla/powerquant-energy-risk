@@ -20,6 +20,14 @@ from sklearn.model_selection import (
     TimeSeriesSplit
 )
 
+from sklearn.pipeline import (
+    Pipeline
+)
+
+from sklearn.preprocessing import (
+    StandardScaler
+)
+
 from src.api.weather_api import (
     WeatherAPI
 )
@@ -102,15 +110,14 @@ class MachineLearningForecaster:
         # ==================================================
         # Forward forecasting features
         #
-        # Important:
-        # We do NOT use future electricity demand
-        # or future wind-generation observations here,
-        # because they are not known at forecast time.
+        # Future realized electricity demand and generation
+        # are deliberately excluded.
         #
-        # Instead we use:
-        # - historical prices
-        # - target-hour calendar
-        # - future weather forecast
+        # Forward forecasting instead uses:
+        #
+        # - current / historical prices
+        # - deterministic target calendar
+        # - weather forecast for target hour
         # ==================================================
 
         self.forward_feature_columns = [
@@ -131,6 +138,12 @@ class MachineLearningForecaster:
             "TargetIsWeekend"
         ]
 
+        self.valid_models = [
+            "Linear Regression",
+            "Random Forest",
+            "Gradient Boosting"
+        ]
+
     # ==================================================
     # Create model
     # ==================================================
@@ -146,8 +159,35 @@ class MachineLearningForecaster:
             == "Linear Regression"
         ):
 
-            return (
-                LinearRegression()
+            # --------------------------------------------------
+            # Linear coefficients are only meaningfully
+            # comparable when predictors are standardized.
+            # --------------------------------------------------
+
+            return Pipeline(
+                steps=[
+                    (
+                        "scaler",
+                        StandardScaler()
+                    ),
+                    (
+                        "regressor",
+                        LinearRegression()
+                    )
+                ]
+            )
+
+        if (
+            model_name
+            == "Random Forest"
+        ):
+
+            return RandomForestRegressor(
+                n_estimators=300,
+                max_depth=12,
+                min_samples_leaf=2,
+                random_state=random_state,
+                n_jobs=-1
             )
 
         if (
@@ -155,23 +195,15 @@ class MachineLearningForecaster:
             == "Gradient Boosting"
         ):
 
-            return (
-                GradientBoostingRegressor(
-                    n_estimators=200,
-                    learning_rate=0.05,
-                    max_depth=3,
-                    random_state=random_state
-                )
+            return GradientBoostingRegressor(
+                n_estimators=200,
+                learning_rate=0.05,
+                max_depth=3,
+                random_state=random_state
             )
 
-        return (
-            RandomForestRegressor(
-                n_estimators=300,
-                max_depth=12,
-                min_samples_leaf=2,
-                random_state=random_state,
-                n_jobs=-1
-            )
+        raise ValueError(
+            f"Unknown model: {model_name}"
         )
 
     def _create_models(
@@ -180,23 +212,12 @@ class MachineLearningForecaster:
     ):
 
         return {
-            "Linear Regression":
+            model_name:
                 self._create_model(
-                    "Linear Regression",
-                    random_state
-                ),
-
-            "Random Forest":
-                self._create_model(
-                    "Random Forest",
-                    random_state
-                ),
-
-            "Gradient Boosting":
-                self._create_model(
-                    "Gradient Boosting",
+                    model_name,
                     random_state
                 )
+            for model_name in self.valid_models
         }
 
     # ==================================================
@@ -219,9 +240,18 @@ class MachineLearningForecaster:
             feature_dataframe.copy()
         )
 
+        required_columns = (
+            list(
+                feature_columns
+            )
+            + [
+                "DayAheadPriceEUR"
+            ]
+        )
+
         missing_columns = [
             column
-            for column in feature_columns
+            for column in required_columns
             if column not in data.columns
         ]
 
@@ -230,9 +260,41 @@ class MachineLearningForecaster:
             return None, (
                 "Missing required features: "
                 + ", ".join(
-                    missing_columns
+                    sorted(
+                        set(
+                            missing_columns
+                        )
+                    )
                 )
             )
+
+        if (
+            "TimeDK"
+            in data.columns
+        ):
+
+            data[
+                "TimeDK"
+            ] = pd.to_datetime(
+                data[
+                    "TimeDK"
+                ],
+                errors="coerce"
+            )
+
+            data = (
+                data.sort_values(
+                    "TimeDK"
+                )
+                .reset_index(
+                    drop=True
+                )
+            )
+
+        # --------------------------------------------------
+        # Feature row at time t predicts electricity price
+        # at t + 1.
+        # --------------------------------------------------
 
         data[
             "NextPrice"
@@ -255,7 +317,9 @@ class MachineLearningForecaster:
         model_data = (
             data.dropna(
                 subset=(
-                    feature_columns
+                    list(
+                        feature_columns
+                    )
                     + [
                         "NextPrice"
                     ]
@@ -283,6 +347,108 @@ class MachineLearningForecaster:
         return (
             model_data,
             None
+        )
+
+    # ==================================================
+    # Latest available prediction row
+    #
+    # Unlike model_data, this dataframe does NOT require
+    # NextPrice to exist.
+    #
+    # It therefore allows us to predict the genuinely
+    # unseen next price from the latest known feature row.
+    # ==================================================
+
+    def _get_latest_feature_row(
+        self,
+        feature_dataframe,
+        feature_columns
+    ):
+
+        if feature_dataframe.empty:
+
+            return None
+
+        missing_columns = [
+            column
+            for column in feature_columns
+            if column not in feature_dataframe.columns
+        ]
+
+        if missing_columns:
+
+            return None
+
+        data = (
+            feature_dataframe.copy()
+        )
+
+        if (
+            "TimeDK"
+            in data.columns
+        ):
+
+            data[
+                "TimeDK"
+            ] = pd.to_datetime(
+                data[
+                    "TimeDK"
+                ],
+                errors="coerce"
+            )
+
+            data = (
+                data.dropna(
+                    subset=[
+                        "TimeDK"
+                    ]
+                )
+                .sort_values(
+                    "TimeDK"
+                )
+            )
+
+        data = data.replace(
+            [
+                np.inf,
+                -np.inf
+            ],
+            np.nan
+        )
+
+        complete = (
+            data.dropna(
+                subset=list(
+                    feature_columns
+                )
+            )
+        )
+
+        if complete.empty:
+
+            return None
+
+        return (
+            complete.iloc[
+                [-1]
+            ].copy()
+        )
+
+    # ==================================================
+    # Time-series splitter
+    #
+    # gap=1 creates a stricter separation between train
+    # and test samples for one-step-ahead forecasting.
+    # ==================================================
+
+    def _create_splitter(
+        self,
+        n_splits
+    ):
+
+        return TimeSeriesSplit(
+            n_splits=n_splits,
+            gap=1
         )
 
     # ==================================================
@@ -346,8 +512,8 @@ class MachineLearningForecaster:
             )
 
         splitter = (
-            TimeSeriesSplit(
-                n_splits=n_splits
+            self._create_splitter(
+                n_splits
             )
         )
 
@@ -372,7 +538,7 @@ class MachineLearningForecaster:
         fold_results = []
 
         # ==================================================
-        # Walk-forward validation
+        # Time-series cross-validation
         # ==================================================
 
         for (
@@ -407,6 +573,12 @@ class MachineLearningForecaster:
             test_times = times.iloc[
                 test_index
             ]
+
+            # --------------------------------------------------
+            # Naive one-hour forecast:
+            #
+            # price(t + 1) = price(t)
+            # --------------------------------------------------
 
             baseline_predictions = (
                 X_test[
@@ -473,6 +645,20 @@ class MachineLearningForecaster:
                         len(
                             test_index
                         ),
+
+                    "train_end_time":
+                        times.iloc[
+                            train_index[
+                                -1
+                            ]
+                        ],
+
+                    "test_start_time":
+                        times.iloc[
+                            test_index[
+                                0
+                            ]
+                        ],
 
                     "baseline_mae":
                         mean_absolute_error(
@@ -587,24 +773,19 @@ class MachineLearningForecaster:
             )
         )
 
-        improvements = []
-
-        for _, row in (
-            comparison_table.iterrows()
-        ):
-
-            improvements.append(
-                self._calculate_improvement(
-                    baseline_mae,
-                    row[
-                        "MAE"
-                    ]
-                )
-            )
-
         comparison_table[
             "ImprovementVsBaseline"
-        ] = improvements
+        ] = (
+            comparison_table[
+                "MAE"
+            ].apply(
+                lambda value:
+                    self._calculate_improvement(
+                        baseline_mae,
+                        value
+                    )
+            )
+        )
 
         comparison_table = (
             comparison_table.sort_values(
@@ -624,7 +805,7 @@ class MachineLearningForecaster:
         )
 
         # ==================================================
-        # Final models
+        # Fit final models on all historical training pairs
         # ==================================================
 
         fitted_models = {}
@@ -649,11 +830,33 @@ class MachineLearningForecaster:
                 model_name
             ] = model
 
-        current_price = (
-            model_data[
+        # ==================================================
+        # Genuine next unseen price prediction
+        # ==================================================
+
+        latest_row = (
+            self._get_latest_feature_row(
+                feature_dataframe,
+                self.feature_columns
+            )
+        )
+
+        if latest_row is None:
+
+            return (
+                self._empty_comparison_result(
+                    (
+                        "No complete latest feature row "
+                        "was available for prediction."
+                    )
+                )
+            )
+
+        current_price = float(
+            latest_row[
                 "DayAheadPriceEUR"
             ].iloc[
-                -1
+                0
             ]
         )
 
@@ -678,17 +881,11 @@ class MachineLearningForecaster:
                 ]
             )
 
-            latest_features = (
-                model_data[
-                    self.feature_columns
-                ].iloc[
-                    [-1]
-                ]
-            )
-
-            next_price_prediction = (
+            next_price_prediction = float(
                 best_model.predict(
-                    latest_features
+                    latest_row[
+                        self.feature_columns
+                    ]
                 )[0]
             )
 
@@ -777,7 +974,22 @@ class MachineLearningForecaster:
                 ),
 
             "n_splits":
-                n_splits
+                n_splits,
+
+            "methodology":
+                {
+                    "validation":
+                        "TimeSeriesSplit with one-observation gap",
+
+                    "forecast_horizon":
+                        "One hour ahead",
+
+                    "linear_regression":
+                        "Standardized predictors",
+
+                    "baseline":
+                        "Next price equals current price"
+                }
         }
 
     # ==================================================
@@ -791,6 +1003,17 @@ class MachineLearningForecaster:
         n_splits=5,
         random_state=42
     ):
+
+        if (
+            model_name
+            not in self.valid_models
+        ):
+
+            return (
+                self._empty_ablation_result(
+                    f"Unknown model: {model_name}"
+                )
+            )
 
         (
             full_model_data,
@@ -838,8 +1061,8 @@ class MachineLearningForecaster:
         ]
 
         splitter = (
-            TimeSeriesSplit(
-                n_splits=n_splits
+            self._create_splitter(
+                n_splits
             )
         )
 
@@ -854,7 +1077,6 @@ class MachineLearningForecaster:
         prediction_store = {}
 
         actual_values = None
-
         prediction_times = None
 
         for (
@@ -867,11 +1089,8 @@ class MachineLearningForecaster:
             ]
 
             all_predictions = []
-
             all_actual = []
-
             all_times = []
-
             fold_mae_values = []
 
             for (
@@ -1063,10 +1282,10 @@ class MachineLearningForecaster:
                 "MAE"
             ].apply(
                 lambda value:
-                self._calculate_improvement(
-                    price_mae,
-                    value
-                )
+                    self._calculate_improvement(
+                        price_mae,
+                        value
+                    )
             )
         )
 
@@ -1114,20 +1333,40 @@ class MachineLearningForecaster:
             )
         )
 
-        current_price = (
-            full_model_data[
+        # ==================================================
+        # Genuine next unseen price prediction
+        # ==================================================
+
+        latest_row = (
+            self._get_latest_feature_row(
+                feature_dataframe,
+                best_features
+            )
+        )
+
+        if latest_row is None:
+
+            return (
+                self._empty_ablation_result(
+                    (
+                        "No complete latest feature row "
+                        "was available for prediction."
+                    )
+                )
+            )
+
+        current_price = float(
+            latest_row[
                 "DayAheadPriceEUR"
             ].iloc[
-                -1
+                0
             ]
         )
 
-        next_price_prediction = (
+        next_price_prediction = float(
             final_model.predict(
-                full_model_data[
+                latest_row[
                     best_features
-                ].iloc[
-                    [-1]
                 ]
             )[0]
         )
@@ -1227,11 +1466,25 @@ class MachineLearningForecaster:
                 ),
 
             "n_splits":
-                n_splits
+                n_splits,
+
+            "methodology":
+                {
+                    "validation":
+                        "Identical TimeSeriesSplit folds with one-observation gap",
+
+                    "row_comparison":
+                        (
+                            "All feature sets use the same complete "
+                            "historical observations"
+                        ),
+
+                    "linear_regression":
+                        "Standardized predictors"
+                }
         }
 
     # ==================================================
-    # NEW:
     # Forward-looking forecast
     # ==================================================
 
@@ -1263,18 +1516,39 @@ class MachineLearningForecaster:
                 )
             )
 
+        try:
+
+            horizon = int(
+                horizon
+            )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            return (
+                self._empty_forward_result(
+                    "Forecast horizon must be numeric."
+                )
+            )
+
         horizon = max(
             1,
             min(
-                int(
-                    horizon
-                ),
+                horizon,
                 24
             )
         )
 
         # ==================================================
-        # Validate models specifically for forward forecast
+        # Historical validation
+        #
+        # Target-hour historical weather uses realized
+        # next-hour weather as a proxy for forecast weather.
+        #
+        # Therefore these validation metrics may be
+        # optimistic relative to live deployment.
         # ==================================================
 
         X = model_data[
@@ -1299,13 +1573,16 @@ class MachineLearningForecaster:
 
             return (
                 self._empty_forward_result(
-                    "Not enough observations for forward-model validation."
+                    (
+                        "Not enough observations for "
+                        "forward-model validation."
+                    )
                 )
             )
 
         splitter = (
-            TimeSeriesSplit(
-                n_splits=n_splits
+            self._create_splitter(
+                n_splits
             )
         )
 
@@ -1377,10 +1654,8 @@ class MachineLearningForecaster:
                 y_test.to_numpy()
             )
 
-        validation_actual = (
-            np.array(
-                validation_actual
-            )
+        validation_actual = np.array(
+            validation_actual
         )
 
         comparison_rows = []
@@ -1460,7 +1735,7 @@ class MachineLearningForecaster:
             ]
         )
 
-        validation_mae = (
+        validation_mae = float(
             model_comparison.iloc[
                 0
             ][
@@ -1468,7 +1743,7 @@ class MachineLearningForecaster:
             ]
         )
 
-        validation_rmse = (
+        validation_rmse = float(
             model_comparison.iloc[
                 0
             ][
@@ -1476,7 +1751,7 @@ class MachineLearningForecaster:
             ]
         )
 
-        validation_r2 = (
+        validation_r2 = float(
             model_comparison.iloc[
                 0
             ][
@@ -1485,7 +1760,7 @@ class MachineLearningForecaster:
         )
 
         # ==================================================
-        # Train best model on all historical data
+        # Train best model on all historical observations
         # ==================================================
 
         model = (
@@ -1505,6 +1780,114 @@ class MachineLearningForecaster:
                 model,
                 self.forward_feature_columns
             )
+        )
+
+        # ==================================================
+        # Historical prices for recursive forecast
+        # ==================================================
+
+        if (
+            "TimeDK"
+            not in feature_dataframe.columns
+            or
+            "DayAheadPriceEUR"
+            not in feature_dataframe.columns
+        ):
+
+            return (
+                self._empty_forward_result(
+                    "Historical price data is incomplete."
+                )
+            )
+
+        historical_data = (
+            feature_dataframe[
+                [
+                    "TimeDK",
+                    "DayAheadPriceEUR"
+                ]
+            ]
+            .copy()
+        )
+
+        historical_data[
+            "TimeDK"
+        ] = pd.to_datetime(
+            historical_data[
+                "TimeDK"
+            ],
+            errors="coerce"
+        )
+
+        historical_data[
+            "DayAheadPriceEUR"
+        ] = pd.to_numeric(
+            historical_data[
+                "DayAheadPriceEUR"
+            ],
+            errors="coerce"
+        )
+
+        historical_data = (
+            historical_data
+            .dropna()
+            .sort_values(
+                "TimeDK"
+            )
+            .drop_duplicates(
+                subset=[
+                    "TimeDK"
+                ],
+                keep="last"
+            )
+            .reset_index(
+                drop=True
+            )
+        )
+
+        price_history = (
+            historical_data[
+                "DayAheadPriceEUR"
+            ]
+            .astype(
+                float
+            )
+            .tolist()
+        )
+
+        # --------------------------------------------------
+        # We need t plus 24 earlier observations to obtain
+        # a true PriceLag24 value.
+        # --------------------------------------------------
+
+        if (
+            len(
+                price_history
+            )
+            < 25
+        ):
+
+            return (
+                self._empty_forward_result(
+                    (
+                        "At least 25 hourly price observations "
+                        "are required for a forward forecast."
+                    )
+                )
+            )
+
+        current_price = float(
+            price_history[
+                -1
+            ]
+        )
+
+        latest_historical_time = (
+            historical_data[
+                "TimeDK"
+            ].iloc[
+                -1
+            ]
         )
 
         # ==================================================
@@ -1540,86 +1923,140 @@ class MachineLearningForecaster:
                 )
             )
 
-        available_horizon = min(
-            horizon,
-            len(
-                future_weather
+        required_weather_columns = [
+            "TimeDK",
+            "TemperatureC",
+            "WeatherWindSpeedMS",
+            "CloudCoverPct",
+            "PrecipitationMM"
+        ]
+
+        missing_weather_columns = [
+            column
+            for column in required_weather_columns
+            if column not in future_weather.columns
+        ]
+
+        if missing_weather_columns:
+
+            return (
+                self._empty_forward_result(
+                    (
+                        "Future weather forecast is missing: "
+                        + ", ".join(
+                            missing_weather_columns
+                        )
+                    )
+                )
             )
-        )
 
         future_weather = (
-            future_weather.head(
-                available_horizon
-            )
-            .reset_index(
-                drop=True
-            )
+            future_weather.copy()
         )
 
-        # ==================================================
-        # Historical prices used by recursive forecast
-        # ==================================================
+        future_weather[
+            "TimeDK"
+        ] = pd.to_datetime(
+            future_weather[
+                "TimeDK"
+            ],
+            errors="coerce"
+        )
 
-        historical_data = (
-            feature_dataframe[
-                [
-                    "TimeDK",
-                    "DayAheadPriceEUR"
-                ]
+        for column in (
+            required_weather_columns[
+                1:
             ]
-            .dropna()
+        ):
+
+            future_weather[
+                column
+            ] = pd.to_numeric(
+                future_weather[
+                    column
+                ],
+                errors="coerce"
+            )
+
+        future_weather = (
+            future_weather
+            .dropna(
+                subset=[
+                    "TimeDK"
+                ]
+            )
             .sort_values(
                 "TimeDK"
             )
+            .drop_duplicates(
+                subset=[
+                    "TimeDK"
+                ],
+                keep="last"
+            )
+        )
+
+        # --------------------------------------------------
+        # Weather observations must actually lie after the
+        # latest historical electricity-price observation.
+        # --------------------------------------------------
+
+        future_weather = (
+            future_weather[
+                future_weather[
+                    "TimeDK"
+                ]
+                >
+                latest_historical_time
+            ]
+            .head(
+                horizon
+            )
             .reset_index(
                 drop=True
             )
         )
 
-        price_history = (
-            historical_data[
-                "DayAheadPriceEUR"
-            ]
-            .astype(
-                float
+        if future_weather.empty:
+
+            return (
+                self._empty_forward_result(
+                    (
+                        "No future weather observations occur "
+                        "after the latest historical price."
+                    )
+                )
             )
-            .tolist()
-        )
 
         if (
-            len(
-                price_history
-            )
-            < 24
+            future_weather[
+                required_weather_columns[
+                    1:
+                ]
+            ]
+            .isna()
+            .any()
+            .any()
         ):
 
             return (
                 self._empty_forward_result(
                     (
-                        "At least 24 hourly price observations "
-                        "are required for a forward forecast."
+                        "The forward forecast could not be generated "
+                        "because required future weather values "
+                        "are missing."
                     )
                 )
             )
-
-        current_price = (
-            price_history[
-                -1
-            ]
-        )
-
-        forecast_times = []
-
-        forecast_prices = []
 
         # ==================================================
         # Recursive multi-hour forecast
         # ==================================================
 
-        for (
-            weather_index,
-            weather_row
-        ) in (
+        forecast_times = []
+        forecast_prices = []
+
+        for _, weather_row in (
             future_weather.iterrows()
         ):
 
@@ -1629,7 +2066,17 @@ class MachineLearningForecaster:
                 ]
             )
 
-            # Current price available at this point
+            # --------------------------------------------------
+            # For a training row at time t:
+            #
+            # DayAheadPriceEUR = price(t)
+            # PriceLag1        = price(t-1)
+            # PriceLag2        = price(t-2)
+            # PriceLag24       = price(t-24)
+            #
+            # price_history[-1] is therefore t.
+            # --------------------------------------------------
+
             model_current_price = (
                 price_history[
                     -1
@@ -1648,9 +2095,16 @@ class MachineLearningForecaster:
                 ]
             )
 
+            # --------------------------------------------------
+            # Important:
+            #
+            # -24 would be t-23 because -1 is t.
+            # The correct t-24 observation is -25.
+            # --------------------------------------------------
+
             price_lag_24 = (
                 price_history[
-                    -24
+                    -25
                 ]
             )
 
@@ -1668,30 +2122,19 @@ class MachineLearningForecaster:
                 dtype=float
             )
 
-            moving_average_6 = (
+            moving_average_6 = float(
                 recent_6.mean()
             )
 
-            moving_average_24 = (
+            moving_average_24 = float(
                 recent_24.mean()
             )
 
-            if (
-                len(
-                    recent_24
+            volatility_24 = float(
+                recent_24.std(
+                    ddof=1
                 )
-                >= 2
-            ):
-
-                volatility_24 = (
-                    recent_24.std(
-                        ddof=1
-                    )
-                )
-
-            else:
-
-                volatility_24 = 0
+            )
 
             target_day_of_week = (
                 target_time.dayofweek
@@ -1731,24 +2174,32 @@ class MachineLearningForecaster:
                             volatility_24,
 
                         "TargetTemperatureC":
-                            weather_row[
-                                "TemperatureC"
-                            ],
+                            float(
+                                weather_row[
+                                    "TemperatureC"
+                                ]
+                            ),
 
                         "TargetWeatherWindSpeedMS":
-                            weather_row[
-                                "WeatherWindSpeedMS"
-                            ],
+                            float(
+                                weather_row[
+                                    "WeatherWindSpeedMS"
+                                ]
+                            ),
 
                         "TargetCloudCoverPct":
-                            weather_row[
-                                "CloudCoverPct"
-                            ],
+                            float(
+                                weather_row[
+                                    "CloudCoverPct"
+                                ]
+                            ),
 
                         "TargetPrecipitationMM":
-                            weather_row[
-                                "PrecipitationMM"
-                            ],
+                            float(
+                                weather_row[
+                                    "PrecipitationMM"
+                                ]
+                            ),
 
                         "TargetHourOfDay":
                             target_time.hour,
@@ -1774,9 +2225,17 @@ class MachineLearningForecaster:
                 .any()
             ):
 
-                continue
+                return (
+                    self._empty_forward_result(
+                        (
+                            "The forecast could not be generated "
+                            "because a recursive model input "
+                            "contained missing values."
+                        )
+                    )
+                )
 
-            predicted_price = (
+            predicted_price = float(
                 model.predict(
                     input_row[
                         self.forward_feature_columns
@@ -1792,9 +2251,12 @@ class MachineLearningForecaster:
                 predicted_price
             )
 
-            # Add prediction back into history.
-            # The next forecast step can now use
-            # this predicted value.
+            # --------------------------------------------------
+            # Recursive forecast:
+            #
+            # prediction becomes the current price for the
+            # following forecast step.
+            # --------------------------------------------------
 
             price_history.append(
                 predicted_price
@@ -1809,11 +2271,7 @@ class MachineLearningForecaster:
 
             return (
                 self._empty_forward_result(
-                    (
-                        "The forecast could not be generated "
-                        "because future weather observations "
-                        "contained missing values."
-                    )
+                    "The forward forecast could not be generated."
                 )
             )
 
@@ -1825,7 +2283,7 @@ class MachineLearningForecaster:
             forecast_times
         )
 
-        ending_price = (
+        ending_price = float(
             forecast_prices[
                 -1
             ]
@@ -1852,27 +2310,44 @@ class MachineLearningForecaster:
 
             price_change_percent = 0
 
-        average_forecast_price = (
+        average_forecast_price = float(
             forecast_prices.mean()
         )
 
-        maximum_forecast_price = (
+        maximum_forecast_price = float(
             forecast_prices.max()
         )
 
-        minimum_forecast_price = (
+        minimum_forecast_price = float(
             forecast_prices.min()
         )
-
-        # ==================================================
-        # History for chart
-        # ==================================================
 
         history_chart = (
             historical_data.tail(
                 48
             )
         )
+
+        weather_location = ""
+
+        if (
+            hasattr(
+                self.weather_api,
+                "locations"
+            )
+            and
+            price_area
+            in self.weather_api.locations
+        ):
+
+            weather_location = (
+                self.weather_api.locations[
+                    price_area
+                ].get(
+                    "name",
+                    ""
+                )
+            )
 
         return {
             "success":
@@ -1942,14 +2417,7 @@ class MachineLearningForecaster:
                 feature_importance,
 
             "weather_location":
-                (
-                    self.weather_api
-                    .locations[
-                        price_area
-                    ][
-                        "name"
-                    ]
-                ),
+                weather_location,
 
             "training_observations":
                 len(
@@ -1957,7 +2425,38 @@ class MachineLearningForecaster:
                 ),
 
             "n_splits":
-                n_splits
+                n_splits,
+
+            "methodology":
+                {
+                    "validation":
+                        "TimeSeriesSplit with one-observation gap",
+
+                    "historical_weather":
+                        (
+                            "Realized next-hour weather is used as "
+                            "a historical proxy for forecast weather"
+                        ),
+
+                    "historical_validation_caveat":
+                        (
+                            "Validation may be optimistic because "
+                            "archived historical weather forecasts "
+                            "are not currently used"
+                        ),
+
+                    "live_weather":
+                        "Actual forward weather forecast",
+
+                    "forecast_method":
+                        "Recursive one-hour-ahead prediction",
+
+                    "future_market_observations":
+                        (
+                            "Future realized electricity demand and "
+                            "generation are not used"
+                        )
+                }
         }
 
     # ==================================================
@@ -1970,14 +2469,60 @@ class MachineLearningForecaster:
         feature_columns
     ):
 
+        # --------------------------------------------------
+        # Tree models
+        # --------------------------------------------------
+
         if hasattr(
             model,
             "feature_importances_"
         ):
 
-            importance = (
-                model.feature_importances_
+            importance = np.array(
+                model.feature_importances_,
+                dtype=float
             )
+
+        # --------------------------------------------------
+        # Standardized Linear Regression pipeline
+        # --------------------------------------------------
+
+        elif (
+            isinstance(
+                model,
+                Pipeline
+            )
+            and
+            "regressor"
+            in model.named_steps
+            and
+            hasattr(
+                model.named_steps[
+                    "regressor"
+                ],
+                "coef_"
+            )
+        ):
+
+            importance = np.abs(
+                np.asarray(
+                    model.named_steps[
+                        "regressor"
+                    ].coef_,
+                    dtype=float
+                )
+            )
+
+            total = (
+                importance.sum()
+            )
+
+            if total > 0:
+
+                importance = (
+                    importance
+                    / total
+                )
 
         elif hasattr(
             model,
@@ -1985,17 +2530,17 @@ class MachineLearningForecaster:
         ):
 
             importance = np.abs(
-                model.coef_
+                np.asarray(
+                    model.coef_,
+                    dtype=float
+                )
             )
 
             total = (
                 importance.sum()
             )
 
-            if (
-                total
-                > 0
-            ):
+            if total > 0:
 
                 importance = (
                     importance
@@ -2040,9 +2585,31 @@ class MachineLearningForecaster:
         requested_splits
     ):
 
-        maximum_splits = (
-            observations
-            - 1
+        try:
+
+            requested_splits = int(
+                requested_splits
+            )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            return 0
+
+        if requested_splits < 2:
+
+            return requested_splits
+
+        # --------------------------------------------------
+        # TimeSeriesSplit with gap=1 needs slightly more
+        # room than a splitter without a gap.
+        # --------------------------------------------------
+
+        maximum_splits = max(
+            0,
+            observations - 2
         )
 
         return min(
@@ -2091,7 +2658,7 @@ class MachineLearningForecaster:
 
             return 0
 
-        return (
+        return float(
             row.iloc[
                 0
             ][
@@ -2155,7 +2722,10 @@ class MachineLearningForecaster:
                 0,
 
             "n_splits":
-                0
+                0,
+
+            "methodology":
+                {}
         }
 
     def _empty_ablation_result(
@@ -2222,7 +2792,10 @@ class MachineLearningForecaster:
                 0,
 
             "n_splits":
-                0
+                0,
+
+            "methodology":
+                {}
         }
 
     def _empty_forward_result(
@@ -2298,5 +2871,8 @@ class MachineLearningForecaster:
                 0,
 
             "n_splits":
-                0
+                0,
+
+            "methodology":
+                {}
         }
