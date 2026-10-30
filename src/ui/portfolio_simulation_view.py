@@ -770,7 +770,7 @@ class PortfolioSimulationView:
                     )
                 ),
                 (
-                    "Max Drawdown",
+                    "Exit-Only Max DD",
                     (
                         f"{statistics['maximum_drawdown_percent']:.2f}%"
                     )
@@ -834,6 +834,24 @@ class PortfolioSimulationView:
                     )
                 )
             ]
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Methodology note: Equity and drawdown are measured "
+                "at completed trade exits. Intratrade mark-to-market "
+                "drawdown is not included."
+            ),
+            font=(
+                "Arial",
+                8
+            ),
+            justify="left",
+            wraplength=1050
+        ).pack(
+            anchor="w",
+            pady=(0, 6)
         )
 
         if not simulation_data.empty:
@@ -940,7 +958,7 @@ class PortfolioSimulationView:
                     )
                 ),
                 (
-                    "Max Drawdown",
+                    "Exit-Only Max DD",
                     (
                         f"{attribution['maximum_drawdown_percent']:.2f}%"
                     )
@@ -1169,15 +1187,17 @@ class PortfolioSimulationView:
             "Direction",
             "Size",
             "Exposure",
+            "Risk Used",
             "PnL",
             "Return",
             "Constraint"
         ]
 
         widths = [
-            23,
+            20,
             10,
-            13,
+            12,
+            10,
             12,
             10,
             15
@@ -1223,6 +1243,9 @@ class PortfolioSimulationView:
                 ),
                 (
                     f"€{trade['GrossExposureEUR']:,.0f}"
+                ),
+                (
+                    f"{trade['RiskUtilizationPercent']:.1f}%"
                 ),
                 (
                     f"€{trade['NetPnLEUR']:+,.0f}"
@@ -1297,7 +1320,7 @@ class PortfolioSimulationView:
 
         equity_axis.set_title(
             (
-                "Capital-Based Strategy Portfolio "
+                "Exit-to-Exit Strategy Portfolio "
                 f"- {time_range}"
             )
         )
@@ -1334,6 +1357,10 @@ class PortfolioSimulationView:
         drawdown_axis.axhline(
             y=0,
             linewidth=1
+        )
+
+        drawdown_axis.set_title(
+            "Exit-to-Exit Drawdown"
         )
 
         drawdown_axis.set_ylabel(
@@ -1404,7 +1431,7 @@ class PortfolioSimulationView:
         )
 
         equity_axis.set_title(
-            "Portfolio Value"
+            "Exit-to-Exit Portfolio Value"
         )
 
         self._format_dates(
@@ -1454,7 +1481,7 @@ class PortfolioSimulationView:
         )
 
         drawdown_axis.set_title(
-            "Drawdown"
+            "Exit-to-Exit Drawdown"
         )
 
         self._format_dates(

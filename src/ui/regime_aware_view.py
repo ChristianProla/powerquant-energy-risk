@@ -52,9 +52,7 @@ class RegimeAwareSizingView:
 
         tk.Label(
             container,
-            text=(
-                "Regime-Aware Position Sizing"
-            ),
+            text="Regime-Aware Position Sizing",
             font=(
                 "Arial",
                 11,
@@ -68,16 +66,16 @@ class RegimeAwareSizingView:
         tk.Label(
             container,
             text=(
-                "Position risk is reduced when the current "
-                "market regime is structurally less suitable "
-                "or previous completed signals in the same "
-                "regime performed poorly."
+                "Position risk can be reduced when the current "
+                "heuristic market regime is structurally less suitable "
+                "or previous completed signal outcomes in the same "
+                "regime have performed poorly."
             ),
             font=(
                 "Arial",
                 8
             ),
-            wraplength=900,
+            wraplength=950,
             justify="left"
         ).pack(
             anchor="w",
@@ -227,19 +225,19 @@ class RegimeAwareSizingView:
                     )
                 ),
                 (
-                    "Max Drawdown",
+                    "Exit-Only Max DD",
                     (
                         f"{statistics['maximum_drawdown_percent']:.2f}%"
                     )
                 ),
                 (
-                    "Active Trades",
+                    "Executed Trades",
                     statistics[
                         "active_trades"
                     ]
                 ),
                 (
-                    "Skipped Trades",
+                    "Skipped Signals",
                     statistics[
                         "skipped_trades"
                     ]
@@ -267,13 +265,54 @@ class RegimeAwareSizingView:
             pady=(0, 6)
         )
 
+        base_risk = 0.0
+
+        if (
+            not simulation_data.empty
+            and
+            "BaseRiskPercent"
+            in simulation_data.columns
+        ):
+
+            base_risk = float(
+                simulation_data[
+                    "BaseRiskPercent"
+                ].iloc[
+                    0
+                ]
+            )
+
+        average_risk_utilization = (
+            statistics.get(
+                "average_risk_utilization",
+                0.0
+            )
+        )
+
+        signals_observed = (
+            statistics.get(
+                "signals_observed",
+                (
+                    statistics.get(
+                        "active_trades",
+                        0
+                    )
+                    +
+                    statistics.get(
+                        "skipped_trades",
+                        0
+                    )
+                )
+            )
+        )
+
         self._show_stats(
             row_2,
             [
                 (
                     "Base Risk",
                     (
-                        f"{simulation_data['BaseRiskPercent'].iloc[0]:.2f}%"
+                        f"{base_risk:.2f}%"
                     )
                 ),
                 (
@@ -289,21 +328,34 @@ class RegimeAwareSizingView:
                     )
                 ),
                 (
+                    "Avg Risk Used",
+                    (
+                        f"{average_risk_utilization:.1f}%"
+                    )
+                ),
+                (
                     "Avg Position",
                     (
                         f"{statistics['average_position']:.2f} MWh"
                     )
+                ),
+                (
+                    "Signals Observed",
+                    signals_observed
                 )
             ]
         )
 
         # ==================================================
-        # Static versus adaptive
+        # Static versus regime-aware
         # ==================================================
 
         tk.Label(
             container,
-            text="Static Risk vs Regime-Aware Risk",
+            text=(
+                "Historical Static Risk vs "
+                "Regime-Aware Risk"
+            ),
             font=(
                 "Arial",
                 9,
@@ -375,7 +427,7 @@ class RegimeAwareSizingView:
                 )
             ),
             (
-                "Max Drawdown",
+                "Exit-Only Max DD",
                 (
                     f"{statistics['static_drawdown']:.2f}%"
                 ),
@@ -435,23 +487,25 @@ class RegimeAwareSizingView:
         # Recent decisions
         # ==================================================
 
-        tk.Label(
-            container,
-            text="Recent Regime-Aware Sizing Decisions",
-            font=(
-                "Arial",
-                9,
-                "bold"
-            )
-        ).pack(
-            anchor="w",
-            pady=(0, 3)
-        )
+        if not simulation_data.empty:
 
-        self._create_trade_table(
-            container,
-            simulation_data
-        )
+            tk.Label(
+                container,
+                text="Recent Regime-Aware Sizing Decisions",
+                font=(
+                    "Arial",
+                    9,
+                    "bold"
+                )
+            ).pack(
+                anchor="w",
+                pady=(0, 3)
+            )
+
+            self._create_trade_table(
+                container,
+                simulation_data
+            )
 
         # ==================================================
         # Regime attribution
@@ -467,7 +521,7 @@ class RegimeAwareSizingView:
 
             tk.Label(
                 container,
-                text="Regime Sizing Attribution",
+                text="Historical Regime Sizing Attribution",
                 font=(
                     "Arial",
                     9,
@@ -484,21 +538,61 @@ class RegimeAwareSizingView:
             )
 
         # ==================================================
-        # Research note
+        # Research / methodology notes
         # ==================================================
 
         tk.Label(
             container,
             text=(
-                "Adaptive regime performance uses only outcomes "
-                "from earlier completed signals in the same regime. "
-                "Future trades never determine earlier risk sizing."
+                "Adaptive methodology: A signal's own outcome never "
+                "affects its current position size. Adaptive decisions "
+                "use only outcomes from earlier completed signals in "
+                "the same regime."
             ),
             font=(
                 "Arial",
                 8
             ),
-            wraplength=900,
+            wraplength=1000,
+            justify="left"
+        ).pack(
+            anchor="w",
+            pady=(0, 3)
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Shadow-learning note: Skipped signals remain observable "
+                "research signals. Their hypothetical completed outcomes "
+                "can update later regime history even though no capital "
+                "was deployed. This allows a previously skipped regime "
+                "to recover if later signal outcomes improve."
+            ),
+            font=(
+                "Arial",
+                8
+            ),
+            wraplength=1000,
+            justify="left"
+        ).pack(
+            anchor="w",
+            pady=(0, 3)
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Risk note: Regime-aware sizing can reduce the configured "
+                "base risk but never increase risk above it. Equity and "
+                "drawdown are measured at completed trade exits; intratrade "
+                "mark-to-market drawdown is not included."
+            ),
+            font=(
+                "Arial",
+                8
+            ),
+            wraplength=1000,
             justify="left"
         ).pack(
             anchor="w",
@@ -543,23 +637,25 @@ class RegimeAwareSizingView:
         headers = [
             "Volatility",
             "Structure",
-            "History",
+            "Prior Signals",
             "Multiplier",
             "Risk %",
+            "Risk Used",
             "Size",
-            "PnL",
+            "Outcome",
             "Action"
         ]
 
         widths = [
             11,
-            15,
-            16,
+            14,
             11,
-            9,
             10,
+            8,
+            9,
+            9,
             11,
-            14
+            13
         ]
 
         for (
@@ -600,6 +696,44 @@ class RegimeAwareSizingView:
             start=1
         ):
 
+            previous_signals = (
+                trade.get(
+                    "PreviousRegimeSignals",
+                    trade.get(
+                        "PreviousRegimeTrades",
+                        0
+                    )
+                )
+            )
+
+            risk_utilization = (
+                trade.get(
+                    "RiskUtilizationPercent",
+                    0.0
+                )
+            )
+
+            # --------------------------------------------------
+            # SignalOutcomePnLPerMWh is the cleanest field for
+            # shadow learning. Fall back to NetPnLEUR for older
+            # compatible result structures.
+            # --------------------------------------------------
+
+            if (
+                "SignalOutcomePnLPerMWh"
+                in simulation_data.columns
+            ):
+
+                outcome_text = (
+                    f"{trade['SignalOutcomePnLPerMWh']:+.2f}/MWh"
+                )
+
+            else:
+
+                outcome_text = (
+                    f"€{trade['NetPnLEUR']:+,.0f}"
+                )
+
             values = [
                 trade[
                     "VolatilityRegime"
@@ -607,9 +741,9 @@ class RegimeAwareSizingView:
                 trade[
                     "StructureRegime"
                 ],
-                trade[
-                    "HistoricalRegimeLabel"
-                ],
+                (
+                    f"{int(previous_signals)}"
+                ),
                 (
                     f"{trade['FinalMultiplier']:.2f}x"
                 ),
@@ -617,11 +751,12 @@ class RegimeAwareSizingView:
                     f"{trade['EffectiveRiskPercent']:.2f}%"
                 ),
                 (
-                    f"{trade['PositionSizeMWh']:.2f}"
+                    f"{risk_utilization:.1f}%"
                 ),
                 (
-                    f"€{trade['NetPnLEUR']:+,.0f}"
+                    f"{trade['PositionSizeMWh']:.2f}"
                 ),
+                outcome_text,
                 trade[
                     "SizingAction"
                 ]
@@ -673,7 +808,7 @@ class RegimeAwareSizingView:
             "Volatility",
             "Structure",
             "Signals",
-            "Active",
+            "Executed",
             "Skipped",
             "Net PnL",
             "Win %",
@@ -684,7 +819,7 @@ class RegimeAwareSizingView:
             11,
             15,
             8,
-            8,
+            9,
             8,
             12,
             9,
@@ -823,31 +958,35 @@ class RegimeAwareSizingView:
             )
         )
 
-        equity_axis.plot(
-            base_equity[
-                "TimeDK"
-            ],
-            base_equity[
-                "PortfolioValue"
-            ],
-            label="Static Risk",
-            linestyle="--"
-        )
+        if not base_equity.empty:
 
-        equity_axis.plot(
-            adaptive_equity[
-                "TimeDK"
-            ],
-            adaptive_equity[
-                "PortfolioValue"
-            ],
-            label="Regime-Aware Risk",
-            linewidth=2
-        )
+            equity_axis.plot(
+                base_equity[
+                    "TimeDK"
+                ],
+                base_equity[
+                    "PortfolioValue"
+                ],
+                label="Static Risk",
+                linestyle="--"
+            )
+
+        if not adaptive_equity.empty:
+
+            equity_axis.plot(
+                adaptive_equity[
+                    "TimeDK"
+                ],
+                adaptive_equity[
+                    "PortfolioValue"
+                ],
+                label="Regime-Aware Risk",
+                linewidth=2
+            )
 
         equity_axis.set_title(
             (
-                "Static vs Regime-Aware Portfolio "
+                "Exit-to-Exit Static vs Regime-Aware Portfolio "
                 f"- {time_range}"
             )
         )
@@ -879,29 +1018,31 @@ class RegimeAwareSizingView:
             )
         )
 
-        multiplier_axis.step(
-            simulation_data[
-                "EntryTime"
-            ],
-            simulation_data[
-                "FinalMultiplier"
-            ],
-            where="post",
-            label="Risk Multiplier"
-        )
+        if not simulation_data.empty:
+
+            multiplier_axis.step(
+                simulation_data[
+                    "EntryTime"
+                ],
+                simulation_data[
+                    "FinalMultiplier"
+                ],
+                where="post",
+                label="Risk Multiplier"
+            )
 
         multiplier_axis.axhline(
             y=1,
             linestyle="--",
             linewidth=1,
-            label="Full Risk"
+            label="Full Base Risk"
         )
 
         multiplier_axis.axhline(
             y=0.5,
             linestyle=":",
             linewidth=1,
-            label="50% Risk"
+            label="50% Base Risk"
         )
 
         multiplier_axis.set_ylim(
@@ -909,12 +1050,16 @@ class RegimeAwareSizingView:
             1.10
         )
 
+        multiplier_axis.set_title(
+            "Chronological Regime-Aware Risk Multiplier"
+        )
+
         multiplier_axis.set_ylabel(
             "Multiplier"
         )
 
         multiplier_axis.set_xlabel(
-            "Time"
+            "Signal Entry Time"
         )
 
         multiplier_axis.grid(

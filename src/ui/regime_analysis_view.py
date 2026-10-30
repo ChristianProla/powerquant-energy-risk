@@ -92,7 +92,7 @@ class RegimeAnalysisView:
             text=(
                 "Classify current market conditions and "
                 "measure how the strategy historically performed "
-                "inside different regimes."
+                "inside different heuristic market regimes."
             ),
             font=(
                 "Arial",
@@ -176,19 +176,19 @@ class RegimeAnalysisView:
             row_2,
             [
                 (
-                    "Best Volatility",
+                    "Best Hist. Volatility",
                     results[
                         "best_volatility_regime"
                     ]
                 ),
                 (
-                    "Worst Volatility",
+                    "Worst Hist. Volatility",
                     results[
                         "worst_volatility_regime"
                     ]
                 ),
                 (
-                    "Best Structure",
+                    "Best Hist. Structure",
                     results[
                         "best_structure_regime"
                     ]
@@ -215,6 +215,30 @@ class RegimeAnalysisView:
             justify="left"
         ).pack(
             anchor="w",
+            pady=(0, 5)
+        )
+
+        # ==================================================
+        # Methodology note
+        # ==================================================
+
+        tk.Label(
+            container,
+            text=(
+                "Methodology note: Regimes are heuristic classifications, "
+                "not statistically estimated latent market states. "
+                "Volatility thresholds use historical information only, "
+                "and completed trades are attributed to the regime observed "
+                "at their exact entry timestamp."
+            ),
+            font=(
+                "Arial",
+                8
+            ),
+            wraplength=1000,
+            justify="left"
+        ).pack(
+            anchor="w",
             pady=(0, 7)
         )
 
@@ -228,7 +252,10 @@ class RegimeAnalysisView:
 
             tk.Label(
                 container,
-                text="Performance by Volatility Regime",
+                text=(
+                    "Historical Performance "
+                    "by Volatility Regime"
+                ),
                 font=(
                     "Arial",
                     9,
@@ -252,7 +279,10 @@ class RegimeAnalysisView:
 
             tk.Label(
                 container,
-                text="Performance by Market Structure",
+                text=(
+                    "Historical Performance "
+                    "by Market Structure"
+                ),
                 font=(
                     "Arial",
                     9,
@@ -493,17 +523,17 @@ class RegimeAnalysisView:
         trend_axis.axhline(
             y=0.30,
             linestyle="--",
-            label="Mean-Reversion Zone"
+            label="Mean-Reversion Threshold"
         )
 
         trend_axis.axhline(
             y=0.75,
             linestyle="--",
-            label="Trending Zone"
+            label="Trending Threshold"
         )
 
         trend_axis.set_title(
-            "Spread Trend Strength"
+            "Heuristic Spread Trend Strength"
         )
 
         trend_axis.set_ylabel(
@@ -550,7 +580,7 @@ class RegimeAnalysisView:
         )
 
         volatility_pnl_axis.set_title(
-            "Net PnL by Volatility Regime"
+            "Historical Net PnL by Volatility Regime"
         )
 
         volatility_pnl_axis.set_ylabel(
@@ -595,7 +625,7 @@ class RegimeAnalysisView:
         )
 
         structure_axis.set_title(
-            "Net PnL by Market Structure"
+            "Historical Net PnL by Market Structure"
         )
 
         structure_axis.set_ylabel(
@@ -615,7 +645,7 @@ class RegimeAnalysisView:
 
         figure.suptitle(
             (
-                "Market Regime Analysis "
+                "Heuristic Market Regime Analysis "
                 f"- {time_range}"
             ),
             fontsize=12

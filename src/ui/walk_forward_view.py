@@ -309,12 +309,12 @@ class WalkForwardView:
 
         row_2.pack(
             fill="x",
-            pady=(0, 7)
+            pady=(0, 5)
         )
 
         values_2 = [
             (
-                "Avg Win Rate",
+                "OOS Win Rate",
                 (
                     f"{results['average_win_rate']:.1f}%"
                 )
@@ -338,7 +338,7 @@ class WalkForwardView:
                 )
             ),
             (
-                "Max Drawdown",
+                "Realized-PnL Max DD",
                 (
                     f"{results['maximum_drawdown']:.2f}"
                 )
@@ -354,6 +354,70 @@ class WalkForwardView:
         self._show_stats(
             row_2,
             values_2
+        )
+
+        # ==================================================
+        # Initial training window
+        # ==================================================
+
+        initial_row = tk.Frame(
+            container
+        )
+
+        initial_row.pack(
+            fill="x",
+            pady=(0, 6)
+        )
+
+        initial_train_ratio = (
+            results.get(
+                "initial_train_ratio",
+                0.0
+            )
+        )
+
+        initial_train_observations = (
+            results.get(
+                "initial_train_observations",
+                0
+            )
+        )
+
+        self._show_stats(
+            initial_row,
+            [
+                (
+                    "Initial Train",
+                    (
+                        f"{initial_train_ratio * 100:.0f}%"
+                    )
+                ),
+                (
+                    "Initial Train Obs.",
+                    (
+                        f"{initial_train_observations:,}"
+                    )
+                )
+            ]
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Walk-forward validation expands the available historical "
+                "training set through time. Parameters for each fold are "
+                "selected using information available before that fold's "
+                "out-of-sample test period."
+            ),
+            font=(
+                "Arial",
+                8
+            ),
+            wraplength=1000,
+            justify="left"
+        ).pack(
+            anchor="w",
+            pady=(0, 6)
         )
 
         # ==================================================
@@ -486,6 +550,8 @@ class WalkForwardView:
             "Window",
             "Entry",
             "Exit",
+            "Train Obs.",
+            "Test Obs.",
             "Test PnL",
             "Sharpe",
             "Win %",
@@ -493,14 +559,16 @@ class WalkForwardView:
         ]
 
         widths = [
+            5,
+            8,
             7,
+            7,
+            10,
             9,
-            8,
-            8,
-            12,
-            10,
-            10,
-            8
+            11,
+            9,
+            9,
+            7
         ]
 
         for (
@@ -535,6 +603,20 @@ class WalkForwardView:
             start=1
         ):
 
+            train_observations = (
+                row.get(
+                    "TrainObservations",
+                    0
+                )
+            )
+
+            test_observations = (
+                row.get(
+                    "TestObservations",
+                    0
+                )
+            )
+
             values = [
                 (
                     f"{int(row['Fold'])}"
@@ -547,6 +629,12 @@ class WalkForwardView:
                 ),
                 (
                     f"{row['ExitZ']:.1f}"
+                ),
+                (
+                    f"{int(train_observations):,}"
+                ),
+                (
+                    f"{int(test_observations):,}"
                 ),
                 (
                     f"{row['TestPnL']:+.2f}"
@@ -611,16 +699,18 @@ class WalkForwardView:
             "combined_test_data"
         ]
 
-        axis.plot(
-            data[
-                "TimeDK"
-            ],
-            data[
-                "WalkForwardCumulativePnL"
-            ],
-            label="Walk-Forward OOS PnL",
-            linewidth=2
-        )
+        if not data.empty:
+
+            axis.plot(
+                data[
+                    "TimeDK"
+                ],
+                data[
+                    "WalkForwardCumulativePnL"
+                ],
+                label="Walk-Forward OOS Realized PnL",
+                linewidth=2
+            )
 
         # --------------------------------------------------
         # Mark fold boundaries
@@ -676,7 +766,7 @@ class WalkForwardView:
         )
 
         axis.set_ylabel(
-            "Cumulative Net PnL"
+            "Cumulative Realized Net PnL"
         )
 
         axis.grid(

@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import ttk
 
+import pandas as pd
 import matplotlib.dates as mdates
 
 from matplotlib.figure import Figure
@@ -496,7 +497,7 @@ class MachineLearningView:
                     f"Prediction"
                 ),
                 (
-                    f"{price_area} Walk-Forward "
+                    f"{price_area} Time-Series "
                     f"Validation - {time_range}"
                 )
             )
@@ -620,7 +621,6 @@ class MachineLearningView:
         )
 
     # ==================================================
-    # NEW:
     # Forward forecast display
     # ==================================================
 
@@ -780,10 +780,34 @@ class MachineLearningView:
             bold=False
         )
 
+        # ==================================================
+        # Methodology note
+        # ==================================================
+
         tk.Label(
             container,
             text=(
-                f"Weather forecast proxy: "
+                "Validation note: Historical target-hour weather "
+                "uses realized weather as a proxy for the weather "
+                "forecast that would have been available at the time. "
+                "Validation performance may therefore be optimistic "
+                "relative to live use."
+            ),
+            font=(
+                "Arial",
+                9
+            ),
+            justify="left",
+            wraplength=1050
+        ).pack(
+            anchor="w",
+            pady=(2, 5)
+        )
+
+        tk.Label(
+            container,
+            text=(
+                f"Representative weather location: "
                 f"{results['weather_location']} "
                 f"for {price_area}"
             ),
@@ -1308,6 +1332,11 @@ class MachineLearningView:
 
     # ==================================================
     # Historical validation chart
+    #
+    # Each feature row at time t predicts the target at
+    # t + 1. Validation points are therefore displayed
+    # at the target timestamp rather than the feature
+    # timestamp.
     # ==================================================
 
     def _create_prediction_chart(
@@ -1331,15 +1360,24 @@ class MachineLearningView:
             111
         )
 
+        plot_times = (
+            pd.to_datetime(
+                times
+            )
+            + pd.Timedelta(
+                hours=1
+            )
+        )
+
         axis.plot(
-            times,
+            plot_times,
             actual,
             label="Actual Price",
             linewidth=2
         )
 
         axis.plot(
-            times,
+            plot_times,
             predicted,
             label=prediction_label,
             linestyle="--",
@@ -1351,7 +1389,7 @@ class MachineLearningView:
         )
 
         axis.set_xlabel(
-            "Validation Period"
+            "Target Time"
         )
 
         axis.set_ylabel(

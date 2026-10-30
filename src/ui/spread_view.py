@@ -864,12 +864,29 @@ class SpreadView:
                     )
                 ),
                 (
-                    "Max Drawdown",
+                    "Realized-PnL Max DD",
                     (
                         f"{statistics['maximum_drawdown']:.2f}"
                     )
                 )
             ]
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Drawdown is calculated from cumulative realized trade PnL. "
+                "Intratrade mark-to-market drawdown is not included."
+            ),
+            font=(
+                "Arial",
+                8
+            ),
+            wraplength=1000,
+            justify="left"
+        ).pack(
+            anchor="w",
+            pady=(0, 6)
         )
 
         figure = (
@@ -963,6 +980,33 @@ class SpreadView:
                 )
             ],
             bold=True
+        )
+
+        baseline_cost = (
+            results.get(
+                "base_transaction_cost",
+                0.25
+            )
+        )
+
+        tk.Label(
+            container,
+            text=(
+                f"Baseline parameter evaluation uses "
+                f"{baseline_cost:.2f} EUR/MWh per leg. "
+                "Alternative transaction-cost levels are treated as "
+                "sensitivity checks rather than separate parameter-selection "
+                "opportunities."
+            ),
+            font=(
+                "Arial",
+                8
+            ),
+            wraplength=1000,
+            justify="left"
+        ).pack(
+            anchor="w",
+            pady=(0, 6)
         )
 
         figure = (
@@ -1246,7 +1290,7 @@ class SpreadView:
         )
 
         pnl_axis.set_ylabel(
-            "Cumulative PnL"
+            "Cumulative Realized PnL"
         )
 
         pnl_axis.set_xlabel(
@@ -1314,10 +1358,18 @@ class SpreadView:
             origin="lower"
         )
 
+        baseline_cost = (
+            results.get(
+                "base_transaction_cost",
+                0.25
+            )
+        )
+
         axis.set_title(
             (
-                "Average Sharpe Proxy Across "
-                f"Parameter Regions - {time_range}"
+                "Average Sharpe Proxy Across Parameter Regions "
+                f"at {baseline_cost:.2f} EUR/MWh per Leg "
+                f"- {time_range}"
             )
         )
 

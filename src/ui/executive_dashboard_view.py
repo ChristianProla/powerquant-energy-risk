@@ -439,7 +439,7 @@ class ExecutiveDashboardView:
                         ]
                     ),
                     (
-                        "Best Structure",
+                        "Best Hist. Structure",
                         regime_results[
                             "best_structure_regime"
                         ]
@@ -558,7 +558,7 @@ class ExecutiveDashboardView:
                     )
                 ),
                 (
-                    "Max Drawdown",
+                    "Exit-Only Max DD",
                     (
                         f"{portfolio_statistics['maximum_drawdown_percent']:.2f}%"
                     )
@@ -714,7 +714,7 @@ class ExecutiveDashboardView:
                     )
                 ),
                 (
-                    "Adaptive Risk",
+                    "Avg Risk Multiplier",
                     (
                         f"{average_multiplier:.2f}x"
                     )
@@ -737,7 +737,7 @@ class ExecutiveDashboardView:
 
         self._create_section_title(
             container,
-            "POWERQUANT ASSESSMENT"
+            "HISTORICAL RESEARCH ASSESSMENT"
         )
 
         assessment_frame = tk.Frame(
@@ -746,7 +746,7 @@ class ExecutiveDashboardView:
 
         assessment_frame.pack(
             fill="x",
-            pady=(0, 8)
+            pady=(0, 4)
         )
 
         tk.Label(
@@ -777,6 +777,25 @@ class ExecutiveDashboardView:
             justify="left"
         ).pack(
             side="left"
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Research heuristic only. This assessment summarizes "
+                "historical performance and current model diagnostics. "
+                "It is not evidence of future strategy performance "
+                "and is not a trading recommendation."
+            ),
+            font=(
+                "Arial",
+                8
+            ),
+            wraplength=1000,
+            justify="left"
+        ).pack(
+            anchor="w",
+            pady=(0, 8)
         )
 
         # ==================================================
@@ -879,6 +898,9 @@ class ExecutiveDashboardView:
 
                 score += 1
 
+            # Drawdown values are negative. A larger value,
+            # for example -8% versus -12%, means a smaller
+            # drawdown magnitude.
             if (
                 adaptive_statistics[
                     "maximum_drawdown_percent"
@@ -892,7 +914,7 @@ class ExecutiveDashboardView:
                 score += 1
 
                 reasons.append(
-                    "regime-aware sizing reduces drawdown"
+                    "regime-aware sizing reduces exit-only drawdown"
                 )
 
         # ==================================================
@@ -919,7 +941,7 @@ class ExecutiveDashboardView:
                 score += 1
 
                 reasons.append(
-                    "current market structure is mean-reverting"
+                    "current heuristic market structure is mean-reverting"
                 )
 
             if (
@@ -932,7 +954,7 @@ class ExecutiveDashboardView:
                 score -= 1
 
                 reasons.append(
-                    "current volatility is extreme"
+                    "current heuristic volatility regime is extreme"
                 )
 
         # ==================================================
@@ -995,7 +1017,7 @@ class ExecutiveDashboardView:
 
             explanation = (
                 "Insufficient evidence for a strong "
-                "strategy-health assessment."
+                "historical research assessment."
             )
 
         return {
@@ -1042,16 +1064,18 @@ class ExecutiveDashboardView:
             ]
         )
 
-        equity_axis.plot(
-            static_equity[
-                "TimeDK"
-            ],
-            static_equity[
-                "PortfolioValue"
-            ],
-            label="Static Risk Portfolio",
-            linestyle="--"
-        )
+        if not static_equity.empty:
+
+            equity_axis.plot(
+                static_equity[
+                    "TimeDK"
+                ],
+                static_equity[
+                    "PortfolioValue"
+                ],
+                label="Static Risk Portfolio",
+                linestyle="--"
+            )
 
         if adaptive_results[
             "success"
@@ -1063,20 +1087,22 @@ class ExecutiveDashboardView:
                 ]
             )
 
-            equity_axis.plot(
-                adaptive_equity[
-                    "TimeDK"
-                ],
-                adaptive_equity[
-                    "PortfolioValue"
-                ],
-                label="Regime-Aware Portfolio",
-                linewidth=2
-            )
+            if not adaptive_equity.empty:
+
+                equity_axis.plot(
+                    adaptive_equity[
+                        "TimeDK"
+                    ],
+                    adaptive_equity[
+                        "PortfolioValue"
+                    ],
+                    label="Regime-Aware Portfolio",
+                    linewidth=2
+                )
 
         equity_axis.set_title(
             (
-                "Portfolio Strategy Overview "
+                "Exit-to-Exit Portfolio Strategy Overview "
                 f"- {time_range}"
             )
         )
@@ -1118,57 +1144,59 @@ class ExecutiveDashboardView:
                 ]
             )
 
-            market_axis.plot(
-                chart_data[
-                    "TimeDK"
-                ],
-                chart_data[
-                    "ZScore"
-                ],
-                label="Spread Z-Score"
-            )
+            if not chart_data.empty:
 
-            market_axis.axhline(
-                y=(
-                    live_results[
-                        "entry_threshold"
-                    ]
-                ),
-                linestyle="--",
-                label="Entry Threshold"
-            )
-
-            market_axis.axhline(
-                y=-(
-                    live_results[
-                        "entry_threshold"
-                    ]
-                ),
-                linestyle="--"
-            )
-
-            market_axis.axhline(
-                y=0,
-                linewidth=1,
-                alpha=0.5
-            )
-
-            market_axis.scatter(
-                [
+                market_axis.plot(
                     chart_data[
                         "TimeDK"
-                    ].iloc[
-                        -1
-                    ]
-                ],
-                [
-                    live_results[
-                        "z_score"
-                    ]
-                ],
-                s=50,
-                label="Current Z"
-            )
+                    ],
+                    chart_data[
+                        "ZScore"
+                    ],
+                    label="Spread Z-Score"
+                )
+
+                market_axis.axhline(
+                    y=(
+                        live_results[
+                            "entry_threshold"
+                        ]
+                    ),
+                    linestyle="--",
+                    label="Entry Threshold"
+                )
+
+                market_axis.axhline(
+                    y=-(
+                        live_results[
+                            "entry_threshold"
+                        ]
+                    ),
+                    linestyle="--"
+                )
+
+                market_axis.axhline(
+                    y=0,
+                    linewidth=1,
+                    alpha=0.5
+                )
+
+                market_axis.scatter(
+                    [
+                        chart_data[
+                            "TimeDK"
+                        ].iloc[
+                            -1
+                        ]
+                    ],
+                    [
+                        live_results[
+                            "z_score"
+                        ]
+                    ],
+                    s=50,
+                    label="Current Z"
+                )
 
         market_axis.set_title(
             "Current Spread Signal Context"

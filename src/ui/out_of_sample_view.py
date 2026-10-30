@@ -269,10 +269,6 @@ class OutOfSampleView:
         time_range
     ):
 
-        # --------------------------------------------------
-        # Main interpretation
-        # --------------------------------------------------
-
         row_1 = tk.Frame(
             container
         )
@@ -393,6 +389,23 @@ class OutOfSampleView:
         self._show_stats(
             row_2,
             values_2
+        )
+
+        tk.Label(
+            container,
+            text=(
+                "Drawdown is based on cumulative realized strategy PnL. "
+                "Intratrade mark-to-market drawdown is not included."
+            ),
+            font=(
+                "Arial",
+                8
+            ),
+            wraplength=1000,
+            justify="left"
+        ).pack(
+            anchor="w",
+            pady=(0, 6)
         )
 
         # ==================================================
@@ -530,7 +543,7 @@ class OutOfSampleView:
                 )
             ),
             (
-                "Maximum Drawdown",
+                "Realized-PnL Max DD",
                 (
                     f"{train['maximum_drawdown']:.2f}"
                 ),
@@ -754,7 +767,7 @@ class OutOfSampleView:
             train_data[
                 "CumulativeNetPnL"
             ],
-            label="In-Sample PnL",
+            label="In-Sample Realized PnL",
             linewidth=2
         )
 
@@ -765,7 +778,7 @@ class OutOfSampleView:
             test_data[
                 "CumulativeNetPnL"
             ],
-            label="Out-of-Sample PnL",
+            label="Out-of-Sample Realized PnL",
             linewidth=2
         )
 
@@ -800,7 +813,7 @@ class OutOfSampleView:
         )
 
         axis.set_ylabel(
-            "Cumulative Net PnL"
+            "Cumulative Realized Net PnL"
         )
 
         axis.grid(
