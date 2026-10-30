@@ -22,6 +22,33 @@ class FeatureEngineer:
 
             return pd.DataFrame()
 
+        # ==================================================
+        # Required input columns
+        # ==================================================
+
+        required_price_columns = [
+            "TimeDK",
+            "DayAheadPriceEUR"
+        ]
+
+        required_factor_columns = [
+            "TimeDK"
+        ]
+
+        if any(
+            column not in price_dataframe.columns
+            for column in required_price_columns
+        ):
+
+            return pd.DataFrame()
+
+        if any(
+            column not in market_factors_dataframe.columns
+            for column in required_factor_columns
+        ):
+
+            return pd.DataFrame()
+
         prices = (
             price_dataframe.copy()
         )
@@ -52,17 +79,54 @@ class FeatureEngineer:
             errors="coerce"
         )
 
-        prices = prices.dropna(
-            subset=[
-                "TimeDK"
-            ]
+        prices = (
+            prices.dropna(
+                subset=[
+                    "TimeDK"
+                ]
+            )
         )
 
-        factors = factors.dropna(
-            subset=[
-                "TimeDK"
-            ]
+        factors = (
+            factors.dropna(
+                subset=[
+                    "TimeDK"
+                ]
+            )
         )
+
+        if (
+            prices.empty
+            or
+            factors.empty
+        ):
+
+            return pd.DataFrame()
+
+        # ==================================================
+        # Numeric price
+        # ==================================================
+
+        prices[
+            "DayAheadPriceEUR"
+        ] = pd.to_numeric(
+            prices[
+                "DayAheadPriceEUR"
+            ],
+            errors="coerce"
+        )
+
+        prices = (
+            prices.dropna(
+                subset=[
+                    "DayAheadPriceEUR"
+                ]
+            )
+        )
+
+        if prices.empty:
+
+            return pd.DataFrame()
 
         # ==================================================
         # Hourly electricity price
@@ -123,6 +187,15 @@ class FeatureEngineer:
                     column
                 ] = np.nan
 
+            factors[
+                column
+            ] = pd.to_numeric(
+                factors[
+                    column
+                ],
+                errors="coerce"
+            )
+
         factors[
             "TimeDK"
         ] = (
@@ -161,6 +234,12 @@ class FeatureEngineer:
         features = (
             features.sort_values(
                 "TimeDK"
+            )
+            .drop_duplicates(
+                subset=[
+                    "TimeDK"
+                ],
+                keep="last"
             )
             .reset_index(
                 drop=True
@@ -208,8 +287,11 @@ class FeatureEngineer:
         # ==================================================
         # Target-hour calendar
         #
-        # These variables describe the NEXT hour,
-        # which is the hour we want to predict.
+        # These variables describe the next hour.
+        #
+        # Calendar information is deterministic and known
+        # in advance, so these features do not introduce
+        # forecasting leakage.
         # ==================================================
 
         target_time = (
@@ -219,6 +301,12 @@ class FeatureEngineer:
             + pd.Timedelta(
                 hours=1
             )
+        )
+
+        features[
+            "TargetTime"
+        ] = (
+            target_time
         )
 
         features[
@@ -273,6 +361,8 @@ class FeatureEngineer:
 
         # ==================================================
         # Price lags
+        #
+        # All price lags use historical information only.
         # ==================================================
 
         features[
@@ -364,13 +454,23 @@ class FeatureEngineer:
         )
 
         # ==================================================
-        # Target-hour weather
+        # Target-hour weather proxy
         #
-        # During historical training, the next observed
-        # weather hour acts as our target-hour weather.
+        # IMPORTANT METHODOLOGY NOTE:
         #
-        # During live forecasting, this is replaced by
-        # an actual weather forecast.
+        # Historical training uses the next REALIZED weather
+        # observation as a proxy for target-hour forecast
+        # weather.
+        #
+        # Live forecasting replaces these values with actual
+        # weather forecasts.
+        #
+        # Therefore historical model evaluation using these
+        # features may be optimistic relative to live use.
+        #
+        # A fully realistic historical evaluation would use
+        # archived weather forecasts that were available at
+        # each historical prediction timestamp.
         # ==================================================
 
         features[
@@ -415,6 +515,9 @@ class FeatureEngineer:
 
         # ==================================================
         # Rolling price features
+        #
+        # These windows end at the current observation and
+        # therefore contain no future prices.
         # ==================================================
 
         features[
@@ -448,7 +551,7 @@ class FeatureEngineer:
         )
 
         # ==================================================
-        # Rolling weather features
+        # Rolling historical weather features
         # ==================================================
 
         features[
@@ -470,6 +573,16 @@ class FeatureEngineer:
                 window=6
             ).mean()
         )
+
+        # ==================================================
+        # Methodology flags
+        #
+        # These are metadata columns, not ML predictors.
+        # ==================================================
+
+        features[
+            "UsesRealizedTargetWeatherProxy"
+        ] = True
 
         # ==================================================
         # Clean
@@ -578,15 +691,28 @@ class FeatureEngineer:
             "ElectricityDemandMW"
         ]
 
-        statistics[
-            "observations"
-        ] = (
-            data[
-                required_columns
-            ]
-            .dropna()
-            .shape[0]
-        )
+        if all(
+            column in data.columns
+            for column in required_columns
+        ):
+
+            statistics[
+                "observations"
+            ] = (
+                data[
+                    required_columns
+                ]
+                .dropna()
+                .shape[
+                    0
+                ]
+            )
+
+        else:
+
+            statistics[
+                "observations"
+            ] = 0
 
         weather_columns = [
             "DayAheadPriceEUR",
@@ -594,15 +720,28 @@ class FeatureEngineer:
             "TemperatureC"
         ]
 
-        statistics[
-            "weather_observations"
-        ] = (
-            data[
-                weather_columns
-            ]
-            .dropna()
-            .shape[0]
-        )
+        if all(
+            column in data.columns
+            for column in weather_columns
+        ):
+
+            statistics[
+                "weather_observations"
+            ] = (
+                data[
+                    weather_columns
+                ]
+                .dropna()
+                .shape[
+                    0
+                ]
+            )
+
+        else:
+
+            statistics[
+                "weather_observations"
+            ] = 0
 
         return statistics
 
@@ -617,6 +756,9 @@ class FeatureEngineer:
     ):
 
         if (
+            "DayAheadPriceEUR"
+            not in dataframe.columns
+            or
             column
             not in dataframe.columns
         ):
@@ -658,7 +800,9 @@ class FeatureEngineer:
 
             return 0
 
-        return correlation
+        return float(
+            correlation
+        )
 
     def _mean(
         self,
@@ -687,7 +831,9 @@ class FeatureEngineer:
 
             return 0
 
-        return value
+        return float(
+            value
+        )
 
     def _empty_statistics(
         self
