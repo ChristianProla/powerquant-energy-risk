@@ -49,12 +49,13 @@ class SpreadBacktester:
                 )
             )
 
-        data = data.sort_values(
-            "TimeDK"
-        )
-
-        data = data.reset_index(
-            drop=True
+        data = (
+            data.sort_values(
+                "TimeDK"
+            )
+            .reset_index(
+                drop=True
+            )
         )
 
         entry_threshold = max(
@@ -78,6 +79,22 @@ class SpreadBacktester:
             )
         )
 
+        # ==================================================
+        # Strategy parameter validation
+        # ==================================================
+
+        if (
+            exit_threshold
+            >= entry_threshold
+        ):
+
+            return self._empty_result(
+                (
+                    "Exit threshold must be lower "
+                    "than entry threshold."
+                )
+            )
+
         # --------------------------------------------------
         # Position definitions
         #
@@ -93,25 +110,17 @@ class SpreadBacktester:
         position = 0
 
         entry_spread = None
-
         entry_time = None
-
         entry_z_score = None
-
         trade_direction = None
 
         trades = []
 
         positions = []
-
         gross_pnl_values = []
-
         transaction_cost_values = []
-
         net_pnl_values = []
-
         entry_markers = []
-
         exit_markers = []
 
         # ==================================================
@@ -146,12 +155,11 @@ class SpreadBacktester:
             # --------------------------------------------------
             # PnL from position held during previous interval
             #
-            # Important:
-            # We calculate PnL BEFORE making a new trading
-            # decision at this timestamp.
+            # PnL is calculated BEFORE the trading decision at
+            # the current timestamp.
             #
-            # This avoids using the current signal to profit
-            # from a price move that already happened.
+            # This prevents the current signal from earning PnL
+            # on a price movement that already occurred.
             # --------------------------------------------------
 
             if index == 0:
@@ -180,7 +188,6 @@ class SpreadBacktester:
             transaction_cost = 0
 
             entry_marker = np.nan
-
             exit_marker = np.nan
 
             # ==================================================
@@ -199,9 +206,9 @@ class SpreadBacktester:
 
                 # ----------------------------------------------
                 # Long spread:
-                # entered when z-score was very negative.
                 #
-                # Exit when z-score has reverted toward zero.
+                # Entered when z-score was strongly negative.
+                # Exit after reverting toward zero.
                 # ----------------------------------------------
 
                 if position == 1:
@@ -215,9 +222,9 @@ class SpreadBacktester:
 
                 # ----------------------------------------------
                 # Short spread:
-                # entered when z-score was very positive.
                 #
-                # Exit when z-score has reverted toward zero.
+                # Entered when z-score was strongly positive.
+                # Exit after reverting toward zero.
                 # ----------------------------------------------
 
                 elif position == -1:
@@ -261,7 +268,14 @@ class SpreadBacktester:
                             - current_spread
                         )
 
-                    # Entry + exit both involve two legs
+                    # Entry:
+                    # 2 legs
+                    #
+                    # Exit:
+                    # 2 legs
+                    #
+                    # Total round trip:
+                    # 4 leg transactions
 
                     total_trade_cost = (
                         transaction_cost_per_leg
@@ -321,11 +335,24 @@ class SpreadBacktester:
             # ==================================================
             # New position
             #
-            # Only enter when currently flat.
+            # Only enter when:
+            #
+            # 1. Currently flat
+            # 2. Z-score is available
+            # 3. There is at least one future observation
+            #
+            # We deliberately do NOT open a new trade on the
+            # final observation because there is no future
+            # price interval in which that trade can earn PnL.
             # ==================================================
 
             if (
                 position == 0
+                and
+                index < (
+                    len(data)
+                    - 1
+                )
                 and
                 not pd.isna(
                     current_z_score
@@ -773,9 +800,11 @@ class SpreadBacktester:
         # --------------------------------------------------
         # Sharpe proxy
         #
-        # Uses hourly PnL observations.
-        # This is a simplified research metric because
-        # the strategy does not yet define invested capital.
+        # Uses hourly strategy PnL observations.
+        #
+        # This remains a research proxy rather than a
+        # conventional portfolio Sharpe Ratio because the
+        # backtester itself does not define invested capital.
         # --------------------------------------------------
 
         pnl_series = (
@@ -818,6 +847,12 @@ class SpreadBacktester:
 
         # --------------------------------------------------
         # Maximum drawdown
+        #
+        # Cumulative PnL begins economically at zero.
+        #
+        # Clipping the running peak at zero ensures that an
+        # initial loss is correctly treated as drawdown from
+        # the starting PnL level rather than as a new peak.
         # --------------------------------------------------
 
         cumulative_pnl = (
@@ -827,7 +862,11 @@ class SpreadBacktester:
         )
 
         running_peak = (
-            cumulative_pnl.cummax()
+            cumulative_pnl
+            .cummax()
+            .clip(
+                lower=0
+            )
         )
 
         drawdown = (

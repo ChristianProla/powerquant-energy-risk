@@ -59,16 +59,22 @@ def test_long_spread_trade_makes_money_when_spread_rises():
         transaction_cost_per_leg=0
     )
 
-    assert result["success"]
+    assert result[
+        "success"
+    ]
 
     trades = result[
         "trades"
     ]
 
-    assert len(trades) >= 1
+    assert len(
+        trades
+    ) >= 1
 
     first_trade = (
-        trades.iloc[0]
+        trades.iloc[
+            0
+        ]
     )
 
     assert first_trade[
@@ -108,16 +114,22 @@ def test_short_spread_trade_makes_money_when_spread_falls():
         transaction_cost_per_leg=0
     )
 
-    assert result["success"]
+    assert result[
+        "success"
+    ]
 
     trades = result[
         "trades"
     ]
 
-    assert len(trades) >= 1
+    assert len(
+        trades
+    ) >= 1
 
     first_trade = (
-        trades.iloc[0]
+        trades.iloc[
+            0
+        ]
     )
 
     assert first_trade[
@@ -150,18 +162,22 @@ def test_transaction_cost_reduces_net_pnl():
         ]
     )
 
-    no_cost = backtester.run_backtest(
-        data,
-        entry_threshold=2.0,
-        exit_threshold=0.0,
-        transaction_cost_per_leg=0
+    no_cost = (
+        backtester.run_backtest(
+            data,
+            entry_threshold=2.0,
+            exit_threshold=0.0,
+            transaction_cost_per_leg=0
+        )
     )
 
-    with_cost = backtester.run_backtest(
-        data,
-        entry_threshold=2.0,
-        exit_threshold=0.0,
-        transaction_cost_per_leg=0.25
+    with_cost = (
+        backtester.run_backtest(
+            data,
+            entry_threshold=2.0,
+            exit_threshold=0.0,
+            transaction_cost_per_leg=0.25
+        )
     )
 
     assert (
@@ -198,20 +214,28 @@ def test_round_trip_cost_uses_two_legs_on_entry_and_exit():
         ]
     )
 
-    result = backtester.run_backtest(
-        data,
-        entry_threshold=2.0,
-        exit_threshold=0.0,
-        transaction_cost_per_leg=0.25
+    result = (
+        backtester.run_backtest(
+            data,
+            entry_threshold=2.0,
+            exit_threshold=0.0,
+            transaction_cost_per_leg=0.25
+        )
     )
 
     trades = result[
         "trades"
     ]
 
-    assert len(trades) >= 1
+    assert len(
+        trades
+    ) >= 1
 
-    trade = trades.iloc[0]
+    trade = (
+        trades.iloc[
+            0
+        ]
+    )
 
     expected_round_trip_cost = (
         0.25
@@ -244,11 +268,13 @@ def test_no_position_before_entry_signal():
         ]
     )
 
-    result = backtester.run_backtest(
-        data,
-        entry_threshold=2.0,
-        exit_threshold=0.0,
-        transaction_cost_per_leg=0
+    result = (
+        backtester.run_backtest(
+            data,
+            entry_threshold=2.0,
+            exit_threshold=0.0,
+            transaction_cost_per_leg=0
+        )
     )
 
     backtest_data = result[
@@ -284,11 +310,13 @@ def test_backtest_is_chronological():
         ]
     )
 
-    result = backtester.run_backtest(
-        data,
-        entry_threshold=2.0,
-        exit_threshold=0.0,
-        transaction_cost_per_leg=0
+    result = (
+        backtester.run_backtest(
+            data,
+            entry_threshold=2.0,
+            exit_threshold=0.0,
+            transaction_cost_per_leg=0
+        )
     )
 
     backtest_data = result[
@@ -298,3 +326,132 @@ def test_backtest_is_chronological():
     assert backtest_data[
         "TimeDK"
     ].is_monotonic_increasing
+
+
+def test_exit_threshold_must_be_below_entry_threshold():
+
+    backtester = SpreadBacktester()
+
+    data = create_signal_data(
+        spreads=[
+            0,
+            5,
+            10
+        ],
+        z_scores=[
+            0,
+            1,
+            2
+        ]
+    )
+
+    result = (
+        backtester.run_backtest(
+            data,
+            entry_threshold=1.0,
+            exit_threshold=1.0,
+            transaction_cost_per_leg=0
+        )
+    )
+
+    assert not result[
+        "success"
+    ]
+
+    assert (
+        "Exit threshold must be lower"
+        in result[
+            "message"
+        ]
+    )
+
+
+def test_no_new_trade_is_opened_on_final_observation():
+
+    backtester = SpreadBacktester()
+
+    data = create_signal_data(
+        spreads=[
+            0,
+            0,
+            10
+        ],
+        z_scores=[
+            0,
+            0,
+            3
+        ]
+    )
+
+    result = (
+        backtester.run_backtest(
+            data,
+            entry_threshold=2.0,
+            exit_threshold=0.0,
+            transaction_cost_per_leg=0.25
+        )
+    )
+
+    assert result[
+        "success"
+    ]
+
+    assert result[
+        "statistics"
+    ][
+        "number_of_trades"
+    ] == 0
+
+    assert result[
+        "statistics"
+    ][
+        "total_transaction_cost"
+    ] == 0
+
+
+def test_maximum_drawdown_includes_initial_loss_from_zero():
+
+    backtester = (
+        SpreadBacktester()
+    )
+
+    backtest_data = pd.DataFrame(
+        {
+            "NetPnL": [
+                -2.0,
+                -1.0,
+                1.0
+            ],
+            "CumulativeNetPnL": [
+                -2.0,
+                -3.0,
+                -2.0
+            ],
+            "GrossPnL": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "TransactionCost": [
+                2.0,
+                1.0,
+                0.0
+            ]
+        }
+    )
+
+    trades = pd.DataFrame()
+
+    statistics = (
+        backtester
+        ._calculate_statistics(
+            backtest_data,
+            trades
+        )
+    )
+
+    assert statistics[
+        "maximum_drawdown"
+    ] == pytest.approx(
+        -3.0
+    )
