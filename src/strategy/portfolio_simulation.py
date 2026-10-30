@@ -10,8 +10,13 @@ class CapitalPortfolioSimulator:
         backtester
     ):
 
-        self.spread_analyzer = spread_analyzer
-        self.backtester = backtester
+        self.spread_analyzer = (
+            spread_analyzer
+        )
+
+        self.backtester = (
+            backtester
+        )
 
     # ==================================================
     # Main simulation
@@ -36,47 +41,120 @@ class CapitalPortfolioSimulator:
                 "No spread data available."
             )
 
-        starting_capital = max(
-            100.0,
-            float(
+        # ==================================================
+        # Parameter conversion
+        # ==================================================
+
+        try:
+
+            starting_capital = float(
                 starting_capital
             )
-        )
 
-        risk_per_trade_percent = max(
-            0.1,
-            float(
+            risk_per_trade_percent = float(
                 risk_per_trade_percent
             )
-        )
 
-        max_position_mwh = max(
-            0.1,
-            float(
+            max_position_mwh = float(
                 max_position_mwh
             )
-        )
 
-        max_gross_exposure_percent = max(
-            1.0,
-            float(
+            max_gross_exposure_percent = float(
                 max_gross_exposure_percent
             )
-        )
 
-        transaction_cost_per_leg = max(
-            0.0,
-            float(
+            transaction_cost_per_leg = float(
                 transaction_cost_per_leg
             )
-        )
 
-        window = max(
-            5,
-            int(
+            entry_threshold = float(
+                entry_threshold
+            )
+
+            exit_threshold = float(
+                exit_threshold
+            )
+
+            window = int(
                 window
             )
-        )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            return self._empty_result(
+                "Portfolio parameters must be numeric."
+            )
+
+        # ==================================================
+        # Parameter validation
+        # ==================================================
+
+        if starting_capital <= 0:
+
+            return self._empty_result(
+                "Starting capital must be positive."
+            )
+
+        if (
+            risk_per_trade_percent <= 0
+            or
+            risk_per_trade_percent > 100
+        ):
+
+            return self._empty_result(
+                (
+                    "Risk per trade must be greater than "
+                    "0% and no greater than 100%."
+                )
+            )
+
+        if max_position_mwh <= 0:
+
+            return self._empty_result(
+                "Maximum position must be positive."
+            )
+
+        if max_gross_exposure_percent <= 0:
+
+            return self._empty_result(
+                "Maximum gross exposure must be positive."
+            )
+
+        if transaction_cost_per_leg < 0:
+
+            return self._empty_result(
+                "Transaction cost cannot be negative."
+            )
+
+        if window < 5:
+
+            return self._empty_result(
+                "Signal window must be at least 5 observations."
+            )
+
+        if entry_threshold < 0.5:
+
+            return self._empty_result(
+                "Entry threshold must be at least 0.5."
+            )
+
+        if exit_threshold < 0:
+
+            return self._empty_result(
+                "Exit threshold cannot be negative."
+            )
+
+        if exit_threshold >= entry_threshold:
+
+            return self._empty_result(
+                (
+                    "Exit threshold must be lower "
+                    "than entry threshold."
+                )
+            )
 
         # ==================================================
         # Generate strategy signals
@@ -96,6 +174,27 @@ class CapitalPortfolioSimulator:
             return self._empty_result(
                 "No strategy signals could be generated."
             )
+
+        signal_data = (
+            signal_data.copy()
+        )
+
+        signal_data[
+            "TimeDK"
+        ] = pd.to_datetime(
+            signal_data[
+                "TimeDK"
+            ]
+        )
+
+        signal_data = (
+            signal_data.sort_values(
+                "TimeDK"
+            )
+            .reset_index(
+                drop=True
+            )
+        )
 
         # ==================================================
         # Standard strategy backtest
@@ -144,20 +243,8 @@ class CapitalPortfolioSimulator:
             )
 
         # ==================================================
-        # Prepare entry data lookup
+        # Prepare timestamps
         # ==================================================
-
-        market_data = (
-            signal_data.copy()
-        )
-
-        market_data[
-            "TimeDK"
-        ] = pd.to_datetime(
-            market_data[
-                "TimeDK"
-            ]
-        )
 
         trades[
             "EntryTime"
@@ -175,8 +262,20 @@ class CapitalPortfolioSimulator:
             ]
         )
 
+        trades = (
+            trades.sort_values(
+                [
+                    "EntryTime",
+                    "ExitTime"
+                ]
+            )
+            .reset_index(
+                drop=True
+            )
+        )
+
         market_lookup = (
-            market_data.set_index(
+            signal_data.set_index(
                 "TimeDK"
             )
         )
@@ -192,7 +291,6 @@ class CapitalPortfolioSimulator:
         simulated_trades = []
 
         equity_times = []
-
         equity_values = []
 
         first_trade_time = (
@@ -212,7 +310,7 @@ class CapitalPortfolioSimulator:
         )
 
         # ==================================================
-        # Process each completed spread trade
+        # Process each completed trade
         # ==================================================
 
         for _, trade in (
@@ -243,8 +341,7 @@ class CapitalPortfolioSimulator:
             )
 
             # --------------------------------------------------
-            # In case duplicate timestamps ever appear,
-            # take the first matching row.
+            # Protect against duplicate market timestamps
             # --------------------------------------------------
 
             if isinstance(
@@ -265,27 +362,65 @@ class CapitalPortfolioSimulator:
                 )
             )
 
-            dk1_price = float(
+            dk1_price = (
                 entry_row.get(
                     "DK1Price",
-                    0
+                    np.nan
                 )
             )
 
-            dk2_price = float(
+            dk2_price = (
                 entry_row.get(
                     "DK2Price",
-                    0
+                    np.nan
                 )
             )
 
+            # --------------------------------------------------
+            # Price observations are necessary to calculate
+            # gross two-leg exposure.
+            # --------------------------------------------------
+
+            try:
+
+                dk1_price = float(
+                    dk1_price
+                )
+
+                dk2_price = float(
+                    dk2_price
+                )
+
+            except (
+                TypeError,
+                ValueError
+            ):
+
+                continue
+
+            if (
+                not np.isfinite(
+                    dk1_price
+                )
+                or
+                not np.isfinite(
+                    dk2_price
+                )
+            ):
+
+                continue
+
             # ==================================================
-            # Risk budget
+            # Capital before trade
             # ==================================================
 
             capital_before = (
                 current_capital
             )
+
+            # ==================================================
+            # Risk budget
+            # ==================================================
 
             risk_budget = (
                 capital_before
@@ -295,21 +430,35 @@ class CapitalPortfolioSimulator:
                 )
             )
 
-            # --------------------------------------------------
+            # ==================================================
             # Estimated adverse spread move
             #
-            # 2 rolling standard deviations is used as
+            # Two rolling standard deviations are used as
             # a simple volatility-risk estimate.
             #
-            # It is NOT a guaranteed maximum loss.
-            # --------------------------------------------------
+            # This is a research heuristic rather than a
+            # guaranteed maximum loss.
+            # ==================================================
 
-            if (
-                pd.isna(
+            try:
+
+                rolling_std_value = float(
                     rolling_std
                 )
+
+            except (
+                TypeError,
+                ValueError
+            ):
+
+                rolling_std_value = np.nan
+
+            if (
+                not np.isfinite(
+                    rolling_std_value
+                )
                 or
-                rolling_std <= 0
+                rolling_std_value <= 0
             ):
 
                 spread_risk = 1.0
@@ -319,11 +468,18 @@ class CapitalPortfolioSimulator:
                 spread_risk = (
                     2.0
                     * abs(
-                        float(
-                            rolling_std
-                        )
+                        rolling_std_value
                     )
                 )
+
+            # --------------------------------------------------
+            # One complete spread round trip:
+            #
+            # Entry DK1
+            # Entry DK2
+            # Exit DK1
+            # Exit DK2
+            # --------------------------------------------------
 
             round_trip_cost_per_mwh = (
                 transaction_cost_per_leg
@@ -350,15 +506,16 @@ class CapitalPortfolioSimulator:
             # ==================================================
             # Gross exposure limit
             #
-            # Each spread position has two legs:
-            # DK1 and DK2.
+            # Gross notional uses absolute prices because a
+            # spread consists of one long and one short leg.
             # ==================================================
 
             gross_price_per_mwh = (
                 abs(
                     dk1_price
                 )
-                + abs(
+                +
+                abs(
                     dk2_price
                 )
             )
@@ -380,6 +537,9 @@ class CapitalPortfolioSimulator:
 
             else:
 
+                # Both power prices can theoretically be zero.
+                # In that situation gross notional does not
+                # constrain position size.
                 exposure_based_size = (
                     max_position_mwh
                 )
@@ -388,47 +548,125 @@ class CapitalPortfolioSimulator:
             # Final position size
             # ==================================================
 
+            size_candidates = {
+                "Risk Budget":
+                    risk_based_size,
+
+                "Exposure Limit":
+                    exposure_based_size,
+
+                "Max Position":
+                    max_position_mwh
+            }
+
+            binding_constraint = min(
+                size_candidates,
+                key=size_candidates.get
+            )
+
             position_size = min(
-                risk_based_size,
-                exposure_based_size,
-                max_position_mwh
+                size_candidates.values()
             )
 
             position_size = max(
-                0,
-                position_size
+                0.0,
+                float(
+                    position_size
+                )
             )
+
+            if (
+                not np.isfinite(
+                    position_size
+                )
+                or
+                position_size <= 0
+            ):
+
+                continue
 
             # ==================================================
             # Capital PnL
             # ==================================================
 
+            gross_pnl_per_mwh = float(
+                trade[
+                    "GrossPnL"
+                ]
+            )
+
+            transaction_cost_per_mwh = float(
+                trade[
+                    "TransactionCost"
+                ]
+            )
+
+            net_pnl_per_mwh = float(
+                trade[
+                    "NetPnL"
+                ]
+            )
+
             gross_pnl_eur = (
-                float(
-                    trade[
-                        "GrossPnL"
-                    ]
-                )
+                gross_pnl_per_mwh
                 * position_size
             )
 
             transaction_cost_eur = (
-                float(
-                    trade[
-                        "TransactionCost"
-                    ]
-                )
+                transaction_cost_per_mwh
                 * position_size
             )
 
             net_pnl_eur = (
-                float(
-                    trade[
-                        "NetPnL"
-                    ]
-                )
+                net_pnl_per_mwh
                 * position_size
             )
+
+            # ==================================================
+            # Risk utilization
+            # ==================================================
+
+            estimated_risk_eur = (
+                estimated_risk_per_mwh
+                * position_size
+            )
+
+            if capital_before > 0:
+
+                estimated_risk_percent = (
+                    estimated_risk_eur
+                    / capital_before
+                ) * 100
+
+            else:
+
+                estimated_risk_percent = 0
+
+            if risk_budget > 0:
+
+                risk_utilization_percent = (
+                    estimated_risk_eur
+                    / risk_budget
+                ) * 100
+
+            else:
+
+                risk_utilization_percent = 0
+
+            # Small floating point differences should never
+            # produce values such as 100.0000000002%.
+
+            risk_utilization_percent = min(
+                100.0,
+                max(
+                    0.0,
+                    risk_utilization_percent
+                )
+            )
+
+            # ==================================================
+            # Update capital
+            # ==================================================
 
             current_capital = (
                 capital_before
@@ -456,39 +694,14 @@ class CapitalPortfolioSimulator:
                     / capital_before
                 ) * 100
 
-                estimated_risk_percent = (
-                    (
-                        estimated_risk_per_mwh
-                        * position_size
-                    )
-                    / capital_before
-                ) * 100
-
             else:
 
                 leverage = 0
                 trade_return_percent = 0
-                estimated_risk_percent = 0
 
             # ==================================================
-            # Determine what constrained the position
+            # Store sized trade
             # ==================================================
-
-            size_candidates = {
-                "Risk Budget":
-                    risk_based_size,
-
-                "Max Position":
-                    max_position_mwh,
-
-                "Exposure Limit":
-                    exposure_based_size
-            }
-
-            binding_constraint = min(
-                size_candidates,
-                key=size_candidates.get
-            )
 
             simulated_trades.append(
                 {
@@ -520,14 +733,35 @@ class CapitalPortfolioSimulator:
                     "PositionSizeMWh":
                         position_size,
 
+                    "RiskBasedSizeMWh":
+                        risk_based_size,
+
+                    "ExposureBasedSizeMWh":
+                        exposure_based_size,
+
+                    "MaxPositionMWh":
+                        max_position_mwh,
+
                     "RiskBudgetEUR":
                         risk_budget,
 
                     "EstimatedRiskPerMWh":
                         estimated_risk_per_mwh,
 
+                    "EstimatedRiskEUR":
+                        estimated_risk_eur,
+
                     "EstimatedRiskPercent":
                         estimated_risk_percent,
+
+                    "RiskUtilizationPercent":
+                        risk_utilization_percent,
+
+                    "GrossPricePerMWh":
+                        gross_price_per_mwh,
+
+                    "MaximumGrossExposureEUR":
+                        maximum_gross_exposure,
 
                     "GrossExposureEUR":
                         gross_exposure,
@@ -589,6 +823,9 @@ class CapitalPortfolioSimulator:
 
         # ==================================================
         # Equity curve
+        #
+        # Current methodology records portfolio value at
+        # trade exits rather than hourly mark-to-market.
         # ==================================================
 
         equity_curve = pd.DataFrame(
@@ -624,7 +861,8 @@ class CapitalPortfolioSimulator:
             equity_curve[
                 "PortfolioValue"
             ]
-            - equity_curve[
+            -
+            equity_curve[
                 "RunningPeak"
             ]
         )
@@ -639,7 +877,8 @@ class CapitalPortfolioSimulator:
                 equity_curve[
                     "DrawdownEUR"
                 ]
-                / equity_curve[
+                /
+                equity_curve[
                     "RunningPeak"
                 ]
             ) * 100,
@@ -757,9 +996,15 @@ class CapitalPortfolioSimulator:
             ].sum()
         )
 
-        average_risk_utilization = (
+        average_estimated_risk_percent = (
             simulation_data[
                 "EstimatedRiskPercent"
+            ].mean()
+        )
+
+        average_risk_utilization = (
+            simulation_data[
+                "RiskUtilizationPercent"
             ].mean()
         )
 
@@ -837,6 +1082,9 @@ class CapitalPortfolioSimulator:
                     "maximum_drawdown_eur":
                         maximum_drawdown_eur,
 
+                    "average_estimated_risk_percent":
+                        average_estimated_risk_percent,
+
                     "average_risk_utilization":
                         average_risk_utilization
                 },
@@ -869,6 +1117,18 @@ class CapitalPortfolioSimulator:
 
                     "max_gross_exposure_percent":
                         max_gross_exposure_percent
+                },
+
+            "methodology":
+                {
+                    "risk_model":
+                        "2x rolling spread volatility plus round-trip costs",
+
+                    "equity_curve":
+                        "Trade-exit equity, not hourly mark-to-market",
+
+                    "gross_exposure":
+                        "Absolute DK1 plus DK2 notional"
                 }
         }
 
@@ -970,6 +1230,9 @@ class CapitalPortfolioSimulator:
                     "maximum_drawdown_eur":
                         0,
 
+                    "average_estimated_risk_percent":
+                        0,
+
                     "average_risk_utilization":
                         0
                 },
@@ -1002,6 +1265,18 @@ class CapitalPortfolioSimulator:
 
                     "max_gross_exposure_percent":
                         max_gross_exposure_percent
+                },
+
+            "methodology":
+                {
+                    "risk_model":
+                        "2x rolling spread volatility plus round-trip costs",
+
+                    "equity_curve":
+                        "Trade-exit equity, not hourly mark-to-market",
+
+                    "gross_exposure":
+                        "Absolute DK1 plus DK2 notional"
                 }
         }
 
@@ -1034,5 +1309,8 @@ class CapitalPortfolioSimulator:
                 {},
 
             "portfolio_parameters":
+                {},
+
+            "methodology":
                 {}
         }
