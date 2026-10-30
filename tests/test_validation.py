@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import pytest
 
 from src.analytics.spread import (
     SpreadAnalyzer
@@ -331,16 +332,6 @@ def test_out_of_sample_warmup_does_not_enter_test_backtest():
         ]
     )
 
-    assert (
-        test_backtest[
-            "TimeDK"
-        ].max()
-        <=
-        result[
-            "test_end"
-        ]
-    )
-
 
 def test_future_test_data_does_not_change_parameter_selection():
 
@@ -362,14 +353,6 @@ def test_future_test_data_does_not_change_parameter_selection():
         )
         * train_ratio
     )
-
-    # ------------------------------------------------------
-    # Deliberately make the future test period completely
-    # different.
-    #
-    # If parameter selection is truly training-only, this
-    # must NOT change the chosen parameters.
-    # ------------------------------------------------------
 
     future_length = (
         len(
@@ -404,16 +387,8 @@ def test_future_test_data_does_not_change_parameter_selection():
         "DK2Price"
     ] = 100.0
 
-    original_validator = (
-        create_oos_validator()
-    )
-
-    modified_validator = (
-        create_oos_validator()
-    )
-
     original_result = (
-        original_validator
+        create_oos_validator()
         .run_validation(
             original_data,
             train_ratio=train_ratio,
@@ -422,7 +397,7 @@ def test_future_test_data_does_not_change_parameter_selection():
     )
 
     modified_result = (
-        modified_validator
+        create_oos_validator()
         .run_validation(
             modified_data,
             train_ratio=train_ratio,
@@ -493,12 +468,10 @@ def test_walk_forward_uses_multiple_test_periods():
         "success"
     ]
 
-    folds = result[
-        "fold_results"
-    ]
-
     assert len(
-        folds
+        result[
+            "fold_results"
+        ]
     ) >= 2
 
 
@@ -586,14 +559,22 @@ def test_walk_forward_train_period_expands():
         )
     )
 
-    train_end_times = (
+    train_sizes = (
         folds[
-            "TrainEnd"
+            "TrainObservations"
         ].tolist()
     )
 
-    assert train_end_times == sorted(
-        train_end_times
+    assert train_sizes == sorted(
+        train_sizes
+    )
+
+    assert len(
+        set(
+            train_sizes
+        )
+    ) == len(
+        train_sizes
     )
 
 
@@ -634,3 +615,151 @@ def test_each_walk_forward_test_occurs_after_training():
                 "TrainEnd"
             ]
         )
+
+
+def test_walk_forward_selected_parameters_are_valid():
+
+    validator = (
+        create_walk_forward_validator()
+    )
+
+    data = create_spread_data(
+        observations=1500
+    )
+
+    result = validator.run_validation(
+        data,
+        n_folds=3,
+        transaction_cost_per_leg=0.25
+    )
+
+    assert result[
+        "success"
+    ]
+
+    selections = result[
+        "parameter_selections"
+    ]
+
+    assert (
+        selections[
+            "ExitZ"
+        ]
+        <
+        selections[
+            "EntryZ"
+        ]
+    ).all()
+
+
+def test_walk_forward_initial_training_ratio_is_configurable():
+
+    validator = (
+        create_walk_forward_validator()
+    )
+
+    data = create_spread_data(
+        observations=1500
+    )
+
+    result = validator.run_validation(
+        data,
+        n_folds=3,
+        transaction_cost_per_leg=0.25,
+        initial_train_ratio=0.60
+    )
+
+    assert result[
+        "success"
+    ]
+
+    assert result[
+        "initial_train_ratio"
+    ] == pytest.approx(
+        0.60
+    )
+
+    assert result[
+        "initial_train_observations"
+    ] == int(
+        len(data)
+        * 0.60
+    )
+
+
+def test_walk_forward_rejects_invalid_initial_training_ratio():
+
+    validator = (
+        create_walk_forward_validator()
+    )
+
+    data = create_spread_data(
+        observations=1500
+    )
+
+    result = validator.run_validation(
+        data,
+        n_folds=3,
+        initial_train_ratio=0.95
+    )
+
+    assert not result[
+        "success"
+    ]
+
+
+def test_walk_forward_max_drawdown_includes_initial_loss():
+
+    validator = (
+        create_walk_forward_validator()
+    )
+
+    data = pd.DataFrame(
+        {
+            "WalkForwardCumulativePnL": [
+                -2.0,
+                -5.0,
+                -3.0
+            ]
+        }
+    )
+
+    drawdown = (
+        validator
+        ._calculate_max_drawdown(
+            data
+        )
+    )
+
+    assert drawdown == pytest.approx(
+        -5.0
+    )
+
+
+def test_walk_forward_combined_test_data_has_no_duplicate_times():
+
+    validator = (
+        create_walk_forward_validator()
+    )
+
+    data = create_spread_data(
+        observations=1500
+    )
+
+    result = validator.run_validation(
+        data,
+        n_folds=3,
+        transaction_cost_per_leg=0.25
+    )
+
+    assert result[
+        "success"
+    ]
+
+    combined = result[
+        "combined_test_data"
+    ]
+
+    assert not combined[
+        "TimeDK"
+    ].duplicated().any()

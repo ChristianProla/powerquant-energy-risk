@@ -48,7 +48,8 @@ class WalkForwardValidator:
         self,
         spread_dataframe,
         n_folds=4,
-        transaction_cost_per_leg=0.25
+        transaction_cost_per_leg=0.25,
+        initial_train_ratio=0.50
     ):
 
         if spread_dataframe.empty:
@@ -87,17 +88,34 @@ class WalkForwardValidator:
             )
         )
 
+        initial_train_ratio = float(
+            initial_train_ratio
+        )
+
+        if (
+            initial_train_ratio <= 0.30
+            or
+            initial_train_ratio >= 0.90
+        ):
+
+            return self._empty_result(
+                (
+                    "Initial training ratio must be "
+                    "between 30% and 90%."
+                )
+            )
+
         # ==================================================
         # Walk-forward structure
         #
-        # Initial training period = 50% of observations.
+        # The initial training period is configurable.
         # Remaining observations are divided into
         # sequential unseen test folds.
         # ==================================================
 
         initial_train_size = int(
             len(data)
-            * 0.50
+            * initial_train_ratio
         )
 
         remaining_observations = (
@@ -275,22 +293,6 @@ class WalkForwardValidator:
                 ]
             )
 
-            parameter_selections.append(
-                {
-                    "Fold":
-                        fold_number,
-
-                    "Window":
-                        selected_window,
-
-                    "EntryZ":
-                        selected_entry,
-
-                    "ExitZ":
-                        selected_exit
-                }
-            )
-
             # ==================================================
             # Training performance using selected parameters
             # ==================================================
@@ -325,6 +327,22 @@ class WalkForwardValidator:
             ]:
 
                 continue
+
+            parameter_selections.append(
+                {
+                    "Fold":
+                        fold_number,
+
+                    "Window":
+                        selected_window,
+
+                    "EntryZ":
+                        selected_entry,
+
+                    "ExitZ":
+                        selected_exit
+                }
+            )
 
             # ==================================================
             # Warm-up before unseen test
@@ -455,6 +473,16 @@ class WalkForwardValidator:
                         ].iloc[
                             -1
                         ],
+
+                    "TrainObservations":
+                        len(
+                            train_data
+                        ),
+
+                    "TestObservations":
+                        len(
+                            test_data
+                        ),
 
                     "Window":
                         selected_window,
@@ -644,17 +672,37 @@ class WalkForwardValidator:
             ].median()
         )
 
-        average_win_rate = (
-            fold_results_dataframe[
-                "TestWinRate"
-            ].mean()
-        )
-
         total_trades = int(
             fold_results_dataframe[
                 "TestTrades"
             ].sum()
         )
+
+        # --------------------------------------------------
+        # Overall OOS win rate
+        #
+        # This is calculated from all completed OOS trades
+        # rather than averaging fold percentages equally.
+        # --------------------------------------------------
+
+        if (
+            not combined_trades.empty
+            and
+            "NetPnL" in combined_trades.columns
+        ):
+
+            average_win_rate = (
+                (
+                    combined_trades[
+                        "NetPnL"
+                    ] > 0
+                ).mean()
+                * 100
+            )
+
+        else:
+
+            average_win_rate = 0
 
         profitable_folds = int(
             (
@@ -741,6 +789,12 @@ class WalkForwardValidator:
                 len(
                     fold_results_dataframe
                 ),
+
+            "initial_train_ratio":
+                initial_train_ratio,
+
+            "initial_train_observations":
+                initial_train_size,
 
             "transaction_cost_per_leg":
                 transaction_cost_per_leg,
@@ -848,6 +902,13 @@ class WalkForwardValidator:
                 for exit_threshold in (
                     self.exit_thresholds
                 ):
+
+                    if (
+                        exit_threshold
+                        >= entry_threshold
+                    ):
+
+                        continue
 
                     backtest = (
                         self.backtester
@@ -957,7 +1018,11 @@ class WalkForwardValidator:
         )
 
         running_peak = (
-            cumulative.cummax()
+            cumulative
+            .cummax()
+            .clip(
+                lower=0
+            )
         )
 
         drawdown = (
@@ -1014,10 +1079,6 @@ class WalkForwardValidator:
             selections
         )
 
-        # --------------------------------------------------
-        # Individual parameters
-        # --------------------------------------------------
-
         window_counts = (
             selections[
                 "Window"
@@ -1053,10 +1114,6 @@ class WalkForwardValidator:
                 0
             ]
         )
-
-        # --------------------------------------------------
-        # Full configuration
-        # --------------------------------------------------
 
         configuration_counts = (
             selections.groupby(
@@ -1203,6 +1260,12 @@ class WalkForwardValidator:
                 message,
 
             "n_folds":
+                0,
+
+            "initial_train_ratio":
+                0,
+
+            "initial_train_observations":
                 0,
 
             "transaction_cost_per_leg":
