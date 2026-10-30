@@ -18,6 +18,8 @@ class StrategyRobustnessAnalyzer:
             backtester
         )
 
+        self.base_transaction_cost = 0.25
+
     # ==================================================
     # Run full robustness test
     # ==================================================
@@ -69,10 +71,16 @@ class StrategyRobustnessAnalyzer:
         results = []
 
         # ==================================================
-        # Test all parameter combinations
+        # Test all valid parameter combinations
         # ==================================================
 
         for window in rolling_windows:
+
+            if window >= len(
+                spread_dataframe
+            ):
+
+                continue
 
             signal_data = (
                 self.spread_analyzer
@@ -90,6 +98,18 @@ class StrategyRobustnessAnalyzer:
                 for exit_threshold in (
                     exit_thresholds
                 ):
+
+                    # ------------------------------------------
+                    # A mean-reversion exit must be closer to
+                    # zero than the entry threshold.
+                    # ------------------------------------------
+
+                    if (
+                        exit_threshold
+                        >= entry_threshold
+                    ):
+
+                        continue
 
                     for transaction_cost in (
                         transaction_costs
@@ -211,28 +231,83 @@ class StrategyRobustnessAnalyzer:
         )
 
         # ==================================================
-        # Minimum trade filter
+        # Baseline-cost parameter analysis
         #
-        # A parameter combination with one lucky trade
-        # is not useful evidence of robustness.
+        # Parameter robustness is evaluated at one fixed,
+        # realistic transaction-cost assumption.
+        #
+        # Other cost levels are reserved for cost sensitivity.
+        # ==================================================
+
+        baseline_results = (
+            results_dataframe[
+                np.isclose(
+                    results_dataframe[
+                        "CostPerLeg"
+                    ],
+                    self.base_transaction_cost
+                )
+            ]
+            .copy()
+            .reset_index(
+                drop=True
+            )
+        )
+
+        if baseline_results.empty:
+
+            return self._empty_result(
+                "No baseline-cost parameter results were generated."
+            )
+
+        # ==================================================
+        # Minimum trade filter
         # ==================================================
 
         minimum_trades = 3
 
         valid_results = (
-            results_dataframe[
-                results_dataframe[
+            baseline_results[
+                baseline_results[
                     "Trades"
                 ] >= minimum_trades
             ]
             .copy()
         )
 
+        # --------------------------------------------------
+        # If three-trade evidence is unavailable, accept
+        # configurations with at least one completed trade.
+        #
+        # Zero-trade configurations are not considered valid
+        # evidence of strategy robustness.
+        # --------------------------------------------------
+
         if valid_results.empty:
 
             valid_results = (
-                results_dataframe.copy()
+                baseline_results[
+                    baseline_results[
+                        "Trades"
+                    ] >= 1
+                ]
+                .copy()
             )
+
+        if valid_results.empty:
+
+            return self._empty_result(
+                (
+                    "No baseline parameter configuration "
+                    "generated a completed trade."
+                )
+            )
+
+        valid_results = (
+            valid_results.reset_index(
+                drop=True
+            )
+        )
 
         # ==================================================
         # Summary statistics
@@ -281,19 +356,21 @@ class StrategyRobustnessAnalyzer:
         )
 
         # ==================================================
-        # Best individual configuration
+        # Best individual baseline-cost configuration
         #
-        # We report this, but do NOT automatically assume
-        # it is the strategy we should use.
+        # Reported for reference only.
+        # It is not automatically assumed to be robust.
         # ==================================================
 
         best_configuration = (
             valid_results.sort_values(
                 by=[
                     "SharpeProxy",
-                    "NetPnL"
+                    "NetPnL",
+                    "Trades"
                 ],
                 ascending=[
+                    False,
                     False,
                     False
                 ]
@@ -304,14 +381,10 @@ class StrategyRobustnessAnalyzer:
         )
 
         # ==================================================
-        # Robust window / entry combinations
+        # Robust window / entry parameter surface
         #
-        # Here we average across:
-        # - exit threshold
-        # - transaction costs
-        #
-        # This is more useful than looking at one isolated
-        # best parameter combination.
+        # Exit thresholds are averaged while transaction cost
+        # remains fixed at the baseline assumption.
         # ==================================================
 
         parameter_surface = (
@@ -327,14 +400,17 @@ class StrategyRobustnessAnalyzer:
                     "SharpeProxy",
                     "mean"
                 ),
+
                 AverageNetPnL=(
                     "NetPnL",
                     "mean"
                 ),
+
                 MedianNetPnL=(
                     "NetPnL",
                     "median"
                 ),
+
                 ProfitableShare=(
                     "NetPnL",
                     lambda values:
@@ -343,10 +419,12 @@ class StrategyRobustnessAnalyzer:
                     ).mean()
                     * 100
                 ),
+
                 AverageTrades=(
                     "Trades",
                     "mean"
                 ),
+
                 AverageDrawdown=(
                     "MaxDrawdown",
                     "mean"
@@ -380,10 +458,25 @@ class StrategyRobustnessAnalyzer:
 
         # ==================================================
         # Transaction-cost sensitivity
+        #
+        # Cost sensitivity intentionally uses the complete
+        # cost grid.
+        #
+        # To keep comparisons fair, we only use parameter
+        # configurations that generate at least one trade.
         # ==================================================
 
+        cost_results = (
+            results_dataframe[
+                results_dataframe[
+                    "Trades"
+                ] >= 1
+            ]
+            .copy()
+        )
+
         cost_sensitivity = (
-            valid_results.groupby(
+            cost_results.groupby(
                 "CostPerLeg",
                 as_index=False
             )
@@ -392,14 +485,17 @@ class StrategyRobustnessAnalyzer:
                     "NetPnL",
                     "mean"
                 ),
+
                 MedianNetPnL=(
                     "NetPnL",
                     "median"
                 ),
+
                 AverageSharpe=(
                     "SharpeProxy",
                     "mean"
                 ),
+
                 ProfitableShare=(
                     "NetPnL",
                     lambda values:
@@ -407,21 +503,28 @@ class StrategyRobustnessAnalyzer:
                         values > 0
                     ).mean()
                     * 100
+                ),
+
+                AverageTrades=(
+                    "Trades",
+                    "mean"
                 )
             )
         )
 
         # ==================================================
-        # Top configurations
+        # Top baseline configurations
         # ==================================================
 
         top_configurations = (
             valid_results.sort_values(
                 by=[
                     "SharpeProxy",
-                    "NetPnL"
+                    "NetPnL",
+                    "Trades"
                 ],
                 ascending=[
+                    False,
                     False,
                     False
                 ]
@@ -437,7 +540,8 @@ class StrategyRobustnessAnalyzer:
         # ==================================================
         # Heatmap data
         #
-        # Average Sharpe for every:
+        # Average baseline-cost Sharpe for every:
+        #
         # window x entry threshold
         # ==================================================
 
@@ -485,6 +589,9 @@ class StrategyRobustnessAnalyzer:
             "all_results":
                 results_dataframe,
 
+            "baseline_results":
+                baseline_results,
+
             "valid_results":
                 valid_results,
 
@@ -505,6 +612,9 @@ class StrategyRobustnessAnalyzer:
 
             "robust_configuration":
                 robust_configuration,
+
+            "base_transaction_cost":
+                self.base_transaction_cost,
 
             "total_combinations":
                 len(
@@ -601,6 +711,9 @@ class StrategyRobustnessAnalyzer:
             "all_results":
                 pd.DataFrame(),
 
+            "baseline_results":
+                pd.DataFrame(),
+
             "valid_results":
                 pd.DataFrame(),
 
@@ -621,6 +734,9 @@ class StrategyRobustnessAnalyzer:
 
             "robust_configuration":
                 None,
+
+            "base_transaction_cost":
+                self.base_transaction_cost,
 
             "total_combinations":
                 0,
