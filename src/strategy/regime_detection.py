@@ -21,12 +21,29 @@ class MarketRegimeDetector:
                 "No spread data available."
             )
 
-        signal_window = max(
-            12,
-            int(
+        try:
+
+            signal_window = int(
                 signal_window
             )
-        )
+
+        except (
+            TypeError,
+            ValueError
+        ):
+
+            return self._empty_result(
+                "Signal window must be numeric."
+            )
+
+        if signal_window < 12:
+
+            return self._empty_result(
+                (
+                    "Signal window must contain "
+                    "at least 12 observations."
+                )
+            )
 
         regimes = (
             self._build_regime_dataframe(
@@ -317,19 +334,23 @@ class MarketRegimeDetector:
                 data[
                     "Spread"
                 ]
-                - data[
+                -
+                data[
                     "RollingMean"
                 ]
             )
-            / safe_std
+            /
+            safe_std
         )
 
         # ==================================================
-        # Volatility thresholds
+        # Historical volatility thresholds
         #
         # Expanding historical quantiles are shifted by
-        # one observation. The current observation therefore
-        # does not help define its own regime threshold.
+        # one observation.
+        #
+        # Therefore the current observation never helps
+        # determine its own volatility-regime threshold.
         # ==================================================
 
         historical_volatility = (
@@ -395,7 +416,8 @@ class MarketRegimeDetector:
             data[
                 "RollingMean"
             ]
-            - data[
+            -
+            data[
                 "RollingMean"
             ].shift(
                 trend_lookback
@@ -408,7 +430,8 @@ class MarketRegimeDetector:
             data[
                 "MeanChange"
             ].abs()
-            / safe_std
+            /
+            safe_std
         )
 
         # ==================================================
@@ -440,7 +463,7 @@ class MarketRegimeDetector:
         )
 
         # ==================================================
-        # DK1 / DK2 relative state
+        # DK1 / DK2 relative-price state
         # ==================================================
 
         data[
@@ -460,7 +483,7 @@ class MarketRegimeDetector:
         )
 
         # ==================================================
-        # Remove early observations without regimes
+        # Remove observations without core regime statistics
         # ==================================================
 
         data = (
@@ -494,17 +517,23 @@ class MarketRegimeDetector:
             ]
         )
 
-        q33 = row[
-            "VolatilityQ33"
-        ]
+        q33 = (
+            row[
+                "VolatilityQ33"
+            ]
+        )
 
-        q67 = row[
-            "VolatilityQ67"
-        ]
+        q67 = (
+            row[
+                "VolatilityQ67"
+            ]
+        )
 
-        q90 = row[
-            "VolatilityQ90"
-        ]
+        q90 = (
+            row[
+                "VolatilityQ90"
+            ]
+        )
 
         if (
             pd.isna(
@@ -625,9 +654,23 @@ class MarketRegimeDetector:
 
         valid = (
             regimes[
-                regimes[
-                    "VolatilityRegime"
-                ] != "Unknown"
+                (
+                    regimes[
+                        "VolatilityRegime"
+                    ] != "Unknown"
+                )
+                &
+                (
+                    regimes[
+                        "StructureRegime"
+                    ] != "Unknown"
+                )
+                &
+                (
+                    regimes[
+                        "SpreadState"
+                    ] != "Unknown"
+                )
             ]
         )
 
@@ -695,19 +738,23 @@ class MarketRegimeDetector:
                 ),
 
             "trend_strength":
-                float(
-                    current[
-                        "TrendStrength"
-                    ]
-                ) if not pd.isna(
-                    current[
-                        "TrendStrength"
-                    ]
-                ) else 0
+                (
+                    float(
+                        current[
+                            "TrendStrength"
+                        ]
+                    )
+                    if not pd.isna(
+                        current[
+                            "TrendStrength"
+                        ]
+                    )
+                    else 0
+                )
         }
 
     # ==================================================
-    # Match trades with entry-time regime
+    # Match trades with exact entry-time regime
     # ==================================================
 
     def _match_trades_to_regimes(
@@ -719,6 +766,13 @@ class MarketRegimeDetector:
         trades = (
             simulation_data.copy()
         )
+
+        if (
+            "EntryTime"
+            not in trades.columns
+        ):
+
+            return pd.DataFrame()
 
         trades[
             "EntryTime"
@@ -744,8 +798,33 @@ class MarketRegimeDetector:
                 regime_columns
             ]
             .copy()
+        )
+
+        regime_lookup[
+            "TimeDK"
+        ] = pd.to_datetime(
+            regime_lookup[
+                "TimeDK"
+            ]
+        )
+
+        # --------------------------------------------------
+        # One regime observation per timestamp.
+        # --------------------------------------------------
+
+        regime_lookup = (
+            regime_lookup
             .sort_values(
                 "TimeDK"
+            )
+            .drop_duplicates(
+                subset=[
+                    "TimeDK"
+                ],
+                keep="last"
+            )
+            .reset_index(
+                drop=True
             )
         )
 
@@ -753,15 +832,27 @@ class MarketRegimeDetector:
             trades.sort_values(
                 "EntryTime"
             )
+            .reset_index(
+                drop=True
+            )
         )
 
+        # --------------------------------------------------
+        # Exact matching is deliberate.
+        #
+        # A trade should only receive the regime that was
+        # calculated for its actual entry timestamp.
+        #
+        # We do not silently carry a stale earlier regime
+        # forward when the entry timestamp is missing.
+        # --------------------------------------------------
+
         matched = (
-            pd.merge_asof(
-                trades,
+            trades.merge(
                 regime_lookup,
+                how="left",
                 left_on="EntryTime",
-                right_on="TimeDK",
-                direction="backward"
+                right_on="TimeDK"
             )
         )
 
@@ -782,6 +873,13 @@ class MarketRegimeDetector:
     ):
 
         if trade_regimes.empty:
+
+            return pd.DataFrame()
+
+        if (
+            regime_column
+            not in trade_regimes.columns
+        ):
 
             return pd.DataFrame()
 
@@ -939,7 +1037,9 @@ class MarketRegimeDetector:
 
         if eligible.empty:
 
-            eligible = attribution
+            eligible = (
+                attribution
+            )
 
         best = (
             eligible.sort_values(
@@ -957,9 +1057,11 @@ class MarketRegimeDetector:
             ]
         )
 
-        return best[
-            "Regime"
-        ]
+        return (
+            best[
+                "Regime"
+            ]
+        )
 
     def _worst_regime(
         self,
@@ -980,7 +1082,9 @@ class MarketRegimeDetector:
 
         if eligible.empty:
 
-            eligible = attribution
+            eligible = (
+                attribution
+            )
 
         worst = (
             eligible.sort_values(
@@ -998,9 +1102,11 @@ class MarketRegimeDetector:
             ]
         )
 
-        return worst[
-            "Regime"
-        ]
+        return (
+            worst[
+                "Regime"
+            ]
+        )
 
     # ==================================================
     # Research summary
