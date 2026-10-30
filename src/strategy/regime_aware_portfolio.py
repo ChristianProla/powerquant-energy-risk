@@ -53,14 +53,15 @@ class RegimeAwarePortfolioSimulator:
             )
 
         # ==================================================
-        # First run the ordinary static-risk portfolio
+        # Static-risk benchmark
         #
-        # This gives us:
-        # - completed strategy trades
-        # - per-trade volatility risk
+        # This provides:
+        #
+        # - completed strategy signals
+        # - per-MWh trade economics
+        # - volatility-risk estimates
         # - exposure information
-        #
-        # It also provides the benchmark we compare against.
+        # - the static benchmark
         # ==================================================
 
         base_results = (
@@ -153,7 +154,7 @@ class RegimeAwarePortfolioSimulator:
             )
 
         # ==================================================
-        # Match every trade with the regime known at entry
+        # Prepare timestamps
         # ==================================================
 
         base_trades[
@@ -181,56 +182,101 @@ class RegimeAwarePortfolioSimulator:
         )
 
         base_trades = (
-            base_trades.sort_values(
-                "EntryTime"
+            base_trades
+            .sort_values(
+                [
+                    "EntryTime",
+                    "ExitTime"
+                ]
+            )
+            .reset_index(
+                drop=True
             )
         )
 
+        # ==================================================
+        # Exact entry-time regime matching
+        #
+        # We deliberately avoid carrying a stale regime
+        # observation forward.
+        # ==================================================
+
+        regime_columns = [
+            "TimeDK",
+            "VolatilityRegime",
+            "StructureRegime",
+            "SpreadState",
+            "RelativePriceState",
+            "RollingSpreadVolatility",
+            "TrendStrength",
+            "ZScore"
+        ]
+
         regime_lookup = (
             regime_data[
-                [
-                    "TimeDK",
-                    "VolatilityRegime",
-                    "StructureRegime",
-                    "SpreadState",
-                    "RelativePriceState",
-                    "RollingSpreadVolatility",
-                    "TrendStrength",
-                    "ZScore"
-                ]
+                regime_columns
             ]
+            .copy()
             .sort_values(
                 "TimeDK"
+            )
+            .drop_duplicates(
+                subset=[
+                    "TimeDK"
+                ],
+                keep="last"
+            )
+            .reset_index(
+                drop=True
             )
         )
 
         trades = (
-            pd.merge_asof(
-                base_trades,
+            base_trades.merge(
                 regime_lookup,
+                how="left",
                 left_on="EntryTime",
-                right_on="TimeDK",
-                direction="backward"
+                right_on="TimeDK"
+            )
+        )
+
+        trades = (
+            trades
+            .sort_values(
+                [
+                    "EntryTime",
+                    "ExitTime"
+                ]
+            )
+            .reset_index(
+                drop=True
             )
         )
 
         # ==================================================
         # Sequential regime-aware simulation
         #
-        # IMPORTANT:
+        # signal_history contains outcomes from PREVIOUS
+        # completed strategy signals in the same regime.
         #
-        # Historical performance for a regime is updated
-        # only AFTER each trade outcome.
+        # Important:
         #
-        # Future trades therefore never influence earlier
-        # position sizing.
+        # A signal can contribute to this history even when
+        # no capital was allocated to it.
+        #
+        # This is deliberate "shadow learning":
+        # skipped strategy signals continue to be observed
+        # hypothetically after their exit.
+        #
+        # The outcome is added only AFTER the signal has
+        # completed, preserving chronological causality.
         # ==================================================
 
         current_capital = float(
             starting_capital
         )
 
-        regime_history = {}
+        signal_history = {}
 
         simulated_trades = []
 
@@ -265,7 +311,10 @@ class RegimeAwarePortfolioSimulator:
                 continue
 
             # ==================================================
-            # Recover per-MWh trade economics
+            # Recover per-MWh signal economics
+            #
+            # These quantities are independent of the static
+            # benchmark's original position size.
             # ==================================================
 
             gross_pnl_per_mwh = (
@@ -311,7 +360,7 @@ class RegimeAwarePortfolioSimulator:
             )
 
             # ==================================================
-            # Current regime
+            # Entry-time regime
             # ==================================================
 
             volatility_regime = (
@@ -331,6 +380,13 @@ class RegimeAwarePortfolioSimulator:
             spread_state = (
                 trade.get(
                     "SpreadState",
+                    "Unknown"
+                )
+            )
+
+            relative_price_state = (
+                trade.get(
+                    "RelativePriceState",
                     "Unknown"
                 )
             )
@@ -359,16 +415,25 @@ class RegimeAwarePortfolioSimulator:
                     "Unknown"
                 )
 
+            if pd.isna(
+                relative_price_state
+            ):
+
+                relative_price_state = (
+                    "Unknown"
+                )
+
             regime_key = (
                 volatility_regime,
                 structure_regime
             )
 
             # ==================================================
-            # Structural regime multiplier
+            # Structural multiplier
             #
-            # These are conservative predefined risk controls.
-            # They do not use future strategy performance.
+            # Conservative predefined regime controls.
+            #
+            # These use only information available at entry.
             # ==================================================
 
             structural_multiplier = (
@@ -381,12 +446,12 @@ class RegimeAwarePortfolioSimulator:
             # ==================================================
             # Adaptive multiplier
             #
-            # Uses only PREVIOUS completed signal outcomes
-            # from the same regime.
+            # Uses only outcomes from PREVIOUS completed
+            # signals in the same regime.
             # ==================================================
 
             previous_outcomes = (
-                regime_history.get(
+                signal_history.get(
                     regime_key,
                     []
                 )
@@ -395,7 +460,7 @@ class RegimeAwarePortfolioSimulator:
             (
                 adaptive_multiplier,
                 historical_regime_label,
-                historical_trade_count,
+                historical_signal_count,
                 historical_average_pnl,
                 historical_win_rate
             ) = self._get_adaptive_multiplier(
@@ -405,8 +470,8 @@ class RegimeAwarePortfolioSimulator:
             # ==================================================
             # Final multiplier
             #
-            # Regime-aware sizing never increases risk above
-            # the user's original risk-per-trade setting.
+            # Regime-aware sizing can reduce risk but never
+            # raise risk above the original user setting.
             # ==================================================
 
             final_multiplier = min(
@@ -415,10 +480,12 @@ class RegimeAwarePortfolioSimulator:
             )
 
             final_multiplier = max(
-                0,
+                0.0,
                 min(
-                    1,
-                    final_multiplier
+                    1.0,
+                    float(
+                        final_multiplier
+                    )
                 )
             )
 
@@ -428,6 +495,10 @@ class RegimeAwarePortfolioSimulator:
                 )
                 * final_multiplier
             )
+
+            # ==================================================
+            # Current capital
+            # ==================================================
 
             capital_before = (
                 current_capital
@@ -449,7 +520,7 @@ class RegimeAwarePortfolioSimulator:
             )
 
             # ==================================================
-            # Risk-based position size
+            # Risk-based size
             # ==================================================
 
             if estimated_risk_per_mwh > 0:
@@ -461,10 +532,10 @@ class RegimeAwarePortfolioSimulator:
 
             else:
 
-                risk_based_size = 0
+                risk_based_size = 0.0
 
             # ==================================================
-            # Exposure-based position size
+            # Exposure-based size
             # ==================================================
 
             maximum_gross_exposure = (
@@ -494,27 +565,47 @@ class RegimeAwarePortfolioSimulator:
             # Final position
             # ==================================================
 
+            size_candidates = {
+                "Risk Budget":
+                    risk_based_size,
+
+                "Exposure Limit":
+                    exposure_based_size,
+
+                "Max Position":
+                    float(
+                        max_position_mwh
+                    )
+            }
+
+            binding_constraint = min(
+                size_candidates,
+                key=size_candidates.get
+            )
+
             if final_multiplier <= 0:
 
-                position_size = 0
+                position_size = 0.0
+
+                binding_constraint = (
+                    "Adaptive Skip"
+                )
 
             else:
 
                 position_size = min(
-                    risk_based_size,
-                    exposure_based_size,
-                    float(
-                        max_position_mwh
-                    )
+                    size_candidates.values()
                 )
 
                 position_size = max(
-                    0,
-                    position_size
+                    0.0,
+                    float(
+                        position_size
+                    )
                 )
 
             # ==================================================
-            # PnL
+            # Portfolio PnL
             # ==================================================
 
             gross_pnl_eur = (
@@ -532,10 +623,57 @@ class RegimeAwarePortfolioSimulator:
                 * position_size
             )
 
+            # ==================================================
+            # Risk utilization
+            # ==================================================
+
+            estimated_risk_eur = (
+                estimated_risk_per_mwh
+                * position_size
+            )
+
+            if capital_before > 0:
+
+                estimated_risk_percent = (
+                    estimated_risk_eur
+                    / capital_before
+                ) * 100
+
+            else:
+
+                estimated_risk_percent = 0.0
+
+            if adjusted_risk_budget > 0:
+
+                risk_utilization_percent = (
+                    estimated_risk_eur
+                    / adjusted_risk_budget
+                ) * 100
+
+            else:
+
+                risk_utilization_percent = 0.0
+
+            risk_utilization_percent = min(
+                100.0,
+                max(
+                    0.0,
+                    risk_utilization_percent
+                )
+            )
+
+            # ==================================================
+            # Capital update
+            # ==================================================
+
             current_capital = (
                 capital_before
                 + net_pnl_eur
             )
+
+            # ==================================================
+            # Exposure and return
+            # ==================================================
 
             gross_exposure = (
                 gross_price_per_mwh
@@ -556,17 +694,23 @@ class RegimeAwarePortfolioSimulator:
 
             else:
 
-                leverage = 0
-                trade_return_percent = 0
+                leverage = 0.0
+                trade_return_percent = 0.0
 
             # ==================================================
             # Trade action
             # ==================================================
 
-            if final_multiplier == 0:
+            if final_multiplier <= 0:
 
                 sizing_action = (
                     "Skip Trade"
+                )
+
+            elif final_multiplier < 0.50:
+
+                sizing_action = (
+                    "Minimum Risk"
                 )
 
             elif final_multiplier < 0.75:
@@ -575,7 +719,7 @@ class RegimeAwarePortfolioSimulator:
                     "Reduced Risk"
                 )
 
-            elif final_multiplier < 1:
+            elif final_multiplier < 1.0:
 
                 sizing_action = (
                     "Moderate Risk"
@@ -586,6 +730,14 @@ class RegimeAwarePortfolioSimulator:
                 sizing_action = (
                     "Full Risk"
                 )
+
+            executed_trade = (
+                position_size > 0
+            )
+
+            # ==================================================
+            # Store signal / trade
+            # ==================================================
 
             simulated_trades.append(
                 {
@@ -613,6 +765,9 @@ class RegimeAwarePortfolioSimulator:
                     "SpreadState":
                         spread_state,
 
+                    "RelativePriceState":
+                        relative_price_state,
+
                     "StructuralMultiplier":
                         structural_multiplier,
 
@@ -625,9 +780,17 @@ class RegimeAwarePortfolioSimulator:
                     "HistoricalRegimeLabel":
                         historical_regime_label,
 
-                    "PreviousRegimeTrades":
-                        historical_trade_count,
+                    "PreviousRegimeSignals":
+                        historical_signal_count,
 
+                    # Compatibility with existing UI code.
+                    "PreviousRegimeTrades":
+                        historical_signal_count,
+
+                    "PreviousAverageSignalPnLPerMWh":
+                        historical_average_pnl,
+
+                    # Compatibility with existing UI code.
                     "PreviousAveragePnLPerMWh":
                         historical_average_pnl,
 
@@ -635,7 +798,9 @@ class RegimeAwarePortfolioSimulator:
                         historical_win_rate,
 
                     "BaseRiskPercent":
-                        risk_per_trade_percent,
+                        float(
+                            risk_per_trade_percent
+                        ),
 
                     "EffectiveRiskPercent":
                         effective_risk_percent,
@@ -649,8 +814,34 @@ class RegimeAwarePortfolioSimulator:
                     "EstimatedRiskPerMWh":
                         estimated_risk_per_mwh,
 
+                    "EstimatedRiskEUR":
+                        estimated_risk_eur,
+
+                    "EstimatedRiskPercent":
+                        estimated_risk_percent,
+
+                    "RiskUtilizationPercent":
+                        risk_utilization_percent,
+
+                    "RiskBasedSizeMWh":
+                        risk_based_size,
+
+                    "ExposureBasedSizeMWh":
+                        exposure_based_size,
+
+                    "MaxPositionMWh":
+                        float(
+                            max_position_mwh
+                        ),
+
                     "PositionSizeMWh":
                         position_size,
+
+                    "GrossPricePerMWh":
+                        gross_price_per_mwh,
+
+                    "MaximumGrossExposureEUR":
+                        maximum_gross_exposure,
 
                     "GrossExposureEUR":
                         gross_exposure,
@@ -670,32 +861,46 @@ class RegimeAwarePortfolioSimulator:
                     "TradeReturnPercent":
                         trade_return_percent,
 
+                    "SignalOutcomePnLPerMWh":
+                        net_pnl_per_mwh,
+
                     "CapitalBefore":
                         capital_before,
 
                     "CapitalAfter":
                         current_capital,
 
+                    "BindingConstraint":
+                        binding_constraint,
+
                     "SizingAction":
-                        sizing_action
+                        sizing_action,
+
+                    "ExecutedTrade":
+                        executed_trade
                 }
             )
 
             # ==================================================
-            # Update regime history AFTER this outcome
+            # Shadow-learning update
             #
-            # This preserves chronological causality.
+            # The signal outcome is known only after ExitTime.
+            #
+            # It is therefore added AFTER the current sizing
+            # decision and cannot influence itself.
+            #
+            # Even skipped signals are observed hypothetically.
             # ==================================================
 
             if regime_key not in (
-                regime_history
+                signal_history
             ):
 
-                regime_history[
+                signal_history[
                     regime_key
                 ] = []
 
-            regime_history[
+            signal_history[
                 regime_key
             ].append(
                 net_pnl_per_mwh
@@ -711,6 +916,10 @@ class RegimeAwarePortfolioSimulator:
                 current_capital
             )
 
+        # ==================================================
+        # Simulation dataframe
+        # ==================================================
+
         simulation_data = (
             pd.DataFrame(
                 simulated_trades
@@ -722,12 +931,15 @@ class RegimeAwarePortfolioSimulator:
             return self._empty_result(
                 (
                     "No regime-aware portfolio "
-                    "trades could be simulated."
+                    "signals could be simulated."
                 )
             )
 
         # ==================================================
         # Equity curve
+        #
+        # This remains a trade-exit equity curve rather than
+        # an hourly mark-to-market equity curve.
         # ==================================================
 
         equity_curve = pd.DataFrame(
@@ -763,7 +975,8 @@ class RegimeAwarePortfolioSimulator:
             equity_curve[
                 "PortfolioValue"
             ]
-            - equity_curve[
+            -
+            equity_curve[
                 "RunningPeak"
             ]
         )
@@ -778,7 +991,8 @@ class RegimeAwarePortfolioSimulator:
                 equity_curve[
                     "DrawdownEUR"
                 ]
-                / equity_curve[
+                /
+                equity_curve[
                     "RunningPeak"
                 ]
             ) * 100,
@@ -817,19 +1031,25 @@ class RegimeAwarePortfolioSimulator:
             ].min()
         )
 
+        maximum_drawdown_eur = float(
+            equity_curve[
+                "DrawdownEUR"
+            ].min()
+        )
+
         active_trades = (
             simulation_data[
                 simulation_data[
-                    "PositionSizeMWh"
-                ] > 0
+                    "ExecutedTrade"
+                ]
             ]
         )
 
         skipped_trades = (
             simulation_data[
-                simulation_data[
-                    "PositionSizeMWh"
-                ] == 0
+                ~simulation_data[
+                    "ExecutedTrade"
+                ]
             ]
         )
 
@@ -856,11 +1076,25 @@ class RegimeAwarePortfolioSimulator:
                 ].mean()
             )
 
+            average_active_multiplier = (
+                active_trades[
+                    "FinalMultiplier"
+                ].mean()
+            )
+
+            average_risk_utilization = (
+                active_trades[
+                    "RiskUtilizationPercent"
+                ].mean()
+            )
+
         else:
 
             win_rate = 0
             average_position = 0
             average_effective_risk = 0
+            average_active_multiplier = 0
+            average_risk_utilization = 0
 
         average_multiplier = (
             simulation_data[
@@ -901,15 +1135,20 @@ class RegimeAwarePortfolioSimulator:
             - static_return
         )
 
-        drawdown_difference = (
+        # Both drawdowns are negative.
+        #
+        # Positive improvement therefore means the
+        # regime-aware portfolio suffered a smaller drawdown.
+
+        drawdown_improvement = (
             maximum_drawdown_percent
             - static_drawdown
         )
 
-        # Positive means drawdown became less negative.
-        drawdown_improvement = (
-            maximum_drawdown_percent
-            - static_drawdown
+        # Compatibility with existing UI code.
+
+        drawdown_difference = (
+            drawdown_improvement
         )
 
         # ==================================================
@@ -963,6 +1202,9 @@ class RegimeAwarePortfolioSimulator:
                     "maximum_drawdown_percent":
                         maximum_drawdown_percent,
 
+                    "maximum_drawdown_eur":
+                        maximum_drawdown_eur,
+
                     "active_trades":
                         len(
                             active_trades
@@ -971,6 +1213,11 @@ class RegimeAwarePortfolioSimulator:
                     "skipped_trades":
                         len(
                             skipped_trades
+                        ),
+
+                    "signals_observed":
+                        len(
+                            simulation_data
                         ),
 
                     "win_rate":
@@ -984,6 +1231,12 @@ class RegimeAwarePortfolioSimulator:
 
                     "average_multiplier":
                         average_multiplier,
+
+                    "average_active_multiplier":
+                        average_active_multiplier,
+
+                    "average_risk_utilization":
+                        average_risk_utilization,
 
                     "static_return":
                         static_return,
@@ -1002,6 +1255,42 @@ class RegimeAwarePortfolioSimulator:
 
                     "drawdown_improvement":
                         drawdown_improvement
+                },
+
+            "methodology":
+                {
+                    "regime_matching":
+                        "Exact entry-timestamp matching",
+
+                    "adaptation":
+                        (
+                            "Previous completed signal outcomes "
+                            "within the same volatility and "
+                            "structure regime"
+                        ),
+
+                    "shadow_learning":
+                        True,
+
+                    "shadow_learning_description":
+                        (
+                            "Skipped signals are observed "
+                            "hypothetically after their exit "
+                            "and can influence later sizing."
+                        ),
+
+                    "risk_limit":
+                        (
+                            "Regime-aware sizing may reduce "
+                            "but never increase the base "
+                            "risk-per-trade setting."
+                        ),
+
+                    "equity_curve":
+                        (
+                            "Trade-exit equity, not hourly "
+                            "mark-to-market."
+                        )
                 }
         }
 
@@ -1068,7 +1357,8 @@ class RegimeAwarePortfolioSimulator:
     # ==================================================
     # Adaptive multiplier
     #
-    # Uses only previous outcomes in the same regime.
+    # Uses only PREVIOUS completed signal outcomes in the
+    # same regime.
     # ==================================================
 
     def _get_adaptive_multiplier(
@@ -1107,8 +1397,8 @@ class RegimeAwarePortfolioSimulator:
         )
 
         # --------------------------------------------------
-        # Require several completed historical signals
-        # before making a performance-based adjustment.
+        # Require at least three historical signal outcomes
+        # before adapting risk.
         # --------------------------------------------------
 
         if trade_count < 3:
@@ -1122,7 +1412,7 @@ class RegimeAwarePortfolioSimulator:
             )
 
         # --------------------------------------------------
-        # Strong historical regime
+        # Strong regime history
         # --------------------------------------------------
 
         if (
@@ -1140,7 +1430,7 @@ class RegimeAwarePortfolioSimulator:
             )
 
         # --------------------------------------------------
-        # Positive but less convincing
+        # Positive regime history
         # --------------------------------------------------
 
         if (
@@ -1158,12 +1448,10 @@ class RegimeAwarePortfolioSimulator:
             )
 
         # --------------------------------------------------
-        # Mixed regime
+        # Mixed regime history
         # --------------------------------------------------
 
-        if (
-            average_pnl > 0
-        ):
+        if average_pnl > 0:
 
             return (
                 0.60,
@@ -1174,7 +1462,7 @@ class RegimeAwarePortfolioSimulator:
             )
 
         # --------------------------------------------------
-        # Weak historical regime
+        # Weak regime history
         # --------------------------------------------------
 
         if win_rate >= 40:
@@ -1188,10 +1476,12 @@ class RegimeAwarePortfolioSimulator:
             )
 
         # --------------------------------------------------
-        # Poor regime
+        # Poor regime history
         #
-        # The strategy signal is observed, but no capital
-        # position is opened.
+        # No capital is allocated to the current signal.
+        #
+        # The signal is still tracked through shadow learning
+        # after it completes.
         # --------------------------------------------------
 
         return (
@@ -1235,12 +1525,12 @@ class RegimeAwarePortfolioSimulator:
             active = (
                 group[
                     group[
-                        "PositionSizeMWh"
-                    ] > 0
+                        "ExecutedTrade"
+                    ]
                 ]
             )
 
-            trades = len(
+            signals = len(
                 group
             )
 
@@ -1249,7 +1539,7 @@ class RegimeAwarePortfolioSimulator:
             )
 
             skipped = (
-                trades
+                signals
                 - active_trades
             )
 
@@ -1286,6 +1576,12 @@ class RegimeAwarePortfolioSimulator:
                     ].mean()
                 )
 
+            average_signal_outcome = (
+                group[
+                    "SignalOutcomePnLPerMWh"
+                ].mean()
+            )
+
             rows.append(
                 {
                     "Volatility":
@@ -1295,7 +1591,7 @@ class RegimeAwarePortfolioSimulator:
                         structure_regime,
 
                     "Signals":
-                        trades,
+                        signals,
 
                     "ActiveTrades":
                         active_trades,
@@ -1310,7 +1606,10 @@ class RegimeAwarePortfolioSimulator:
                         win_rate,
 
                     "AverageMultiplier":
-                        average_multiplier
+                        average_multiplier,
+
+                    "AverageSignalOutcomePerMWh":
+                        average_signal_outcome
                 }
             )
 
@@ -1356,5 +1655,8 @@ class RegimeAwarePortfolioSimulator:
                 pd.DataFrame(),
 
             "statistics":
+                {},
+
+            "methodology":
                 {}
         }
